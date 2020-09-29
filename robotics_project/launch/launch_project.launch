@@ -75,7 +75,7 @@
 
   <group ns="$(arg namespace_project)">
     <!-- Mission planner -->
-    <node pkg="robotics_project" type="sm_students.py" name="logic_state_machine" output="screen">
+    <node pkg="robotics_project" type="bt_students.py" name="logic_state_machine" output="screen">
       <param name="global_loc_srv" value=""/>
       <param name="clear_costmaps_srv"  value=""/>
       <param name="pick_srv"            value="/$(arg namespace_project)/pick_cube_gui"/>
@@ -113,14 +113,14 @@
     </node>
 
     <!-- Aruco marker detector -->
-<!--     <node pkg="aruco_ros" type="single"  name="aruco_single" output="screen">
+    <node pkg="aruco_ros" type="single"  name="aruco_single" output="screen">
         <param name="camera_frame"        value="xtion_rgb_optical_frame"/>
         <param name="aruco_frame"        value="" />
         <remap from="/camera_info"        to="/xtion/rgb/camera_info" />
         <remap from="/image"              to="/xtion/rgb/image_rect_color" />
-        <param name="marker_pose_topic"   value="/place_holder12"/>
-        <param name="robot_base_frame"          value=""/>
-    </node> -->
+        <param name="marker_pose_topic"   value="/$(arg namespace_project)/marker_pose_gui"/>
+        <param name="robot_base_frame"          value="robot_frame"/>
+    </node>
   </group>
 
   <!-- This node had to me moved out of the group for the PlanningSceneInterface() to be constructed -->
