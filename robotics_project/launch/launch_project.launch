@@ -79,15 +79,15 @@
       <param name="global_loc_srv" value=""/>
       <param name="clear_costmaps_srv"  value=""/>
       <param name="pick_srv"            value="/$(arg namespace_project)/pick_cube_gui"/>
-      <param name="place_srv"           value=""/>
+      <param name="place_srv"           value="/$(arg namespace_project)/place_cube_gui"/>
       <param name="nav_goal_topic"      value=""/>
       <param name="cmd_vel_topic"       value="/key_vel"/>
       <param name="move_base_frame"     value=""/>
-      <param name="pick_pose_topic"     value=""/>
+      <param name="pick_pose_topic"     value="/pick_pose_topic"/>
       <param name="place_pose_topic"    value=""/>
-      <param name="aruco_pose_topic"    value=""/>
+      <param name="aruco_pose_topic"    value="/$(arg namespace_project)/marker_pose_gui"/>
       <param name="cube_pose"           value="0.50306828716, 0.0245718046511, 0.915538062216, 0.0144467629456, 0.706141958739, 0.707257659069, -0.0306827123383"/>
-      <param name="robot_base_frame"          value="" />
+      <param name="robot_base_frame"          value="robot_frame" />
       <param name="move_head_srv"       value="/$(arg namespace_project)/move_head_gui"/>
       <param name="amcl_estimate"  value="" />
       <param name="move_base_feedback"  value="" />
@@ -97,16 +97,16 @@
      <node pkg="robotics_project" type="poses_pub.py" name="poses_publisher" output="screen">
       <param name="pick_pose"         value="-1.1480, -6.1, -0.001, 0.0, 0.0, -0.709307863674, 0.70489882574"/>
       <param name="place_pose"        value="2.6009, -1.7615, 0.0, 0.0, 0.0, 0.0, 1"/>
-      <param name="pick_pose_topic"   value="/place_holder1"/>
-      <param name="place_pose_topic"  value="/place_holder2"/>
+      <param name="pick_pose_topic"   value="/pick_pose_topic"/>
+      <param name="place_pose_topic"  value="/place_pose_topic"/>
       <param name="map_frame"   value="/place_holder3"/>
     </node>
 
     <!-- Node exposing service to trigger the pick and place -->
     <node pkg="robotics_project" name="manipulation_client" type="manipulation_client.py" output="screen">  
-      <param name="marker_pose_topic"   value="/place_holder4"/>
+      <param name="marker_pose_topic"   value="/$(arg namespace_project)/marker_pose_gui"/>
       <param name="pick_srv"            value="/$(arg namespace_project)/pick_cube_gui"/>
-      <param name="place_srv"           value="/place_holder6"/>
+      <param name="place_srv"           value="/$(arg namespace_project)/place_cube_gui"/>
       <param name="move_head_srv"       value="/$(arg namespace_project)/move_head_gui"/>
       <param name="pickup_marker_pose"  value="/steven"/>
       <param name="place_marker_pose"   value="/fred"/>
