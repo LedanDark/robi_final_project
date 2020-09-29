@@ -53,6 +53,7 @@ class SphericalService(object):
 		rospy.loginfo("Starting Spherical Grab Service")
 
 		self.pick_srv_nm = rospy.get_param(rospy.get_name() + '/pick_srv')
+		rospy.loginfo("Spherical service name = {}".format(self.pick_srv_nm))
 		self.place_srv_nm = rospy.get_param(rospy.get_name() + '/place_srv')
 		self.mv_head_srv_nm = rospy.get_param(rospy.get_name() + '/move_head_srv')
 
@@ -64,7 +65,7 @@ class SphericalService(object):
 
 		rospy.loginfo("Launching SphericalService constructor")
 		self.pick_type = ManipulateAruco()
-
+		rospy.loginfo("Constructor finished!")
 
 	def start_aruco_pick(self, req):
 		success = self.pick_type.pick_and_place_aruco("pick")
@@ -117,10 +118,12 @@ class ManipulateAruco(object):
 		rospy.loginfo("Waiting for /pickup_pose AS...")
 		self.pick_as = SimpleActionClient(self.pickup_pose_top, PickUpPoseAction)
 		self.pick_as.wait_for_server()
+		rospy.loginfo("-------------Connected with /pickup_pose AS...")
 
 		rospy.loginfo("Waiting for /place_pose AS...")
 		self.place_as = SimpleActionClient(self.place_pose_top, PickUpPoseAction)
 		self.place_as.wait_for_server()
+		rospy.loginfo("-------------Connected with /pickup_pose AS...")
 
 		rospy.loginfo("Waiting for '/play_motion' AS...")
 		self.play_m_as = SimpleActionClient('/play_motion', PlayMotionAction)

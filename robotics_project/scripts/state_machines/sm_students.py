@@ -5,6 +5,7 @@ from numpy import linalg as LA, math
 
 import rospy
 from geometry_msgs.msg import Twist
+from robotics_project.msg import PickUpPoseAction
 from std_srvs.srv import Empty, SetBool, SetBoolRequest
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from robotics_project.srv import MoveHead, MoveHeadRequest, MoveHeadResponse
@@ -32,8 +33,8 @@ class StateMachine(object):
         # Access rosparams
         self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
         self.mv_head_srv_nm = rospy.get_param(rospy.get_name() + '/move_head_srv')
-
-        # Subscribe to topics
+        self.pick_cube_srv_nm = rospy.get_param(rospy.get_name() + '/pick_srv')
+        # Subscribe to topicspick_srv
 
         # Wait for service providers
         rospy.wait_for_service(self.mv_head_srv_nm, timeout=30)
@@ -44,6 +45,8 @@ class StateMachine(object):
         # Set up action clients
         rospy.loginfo("%s: Waiting for play_motion action server...", self.node_name)
         self.play_motion_ac = SimpleActionClient("/play_motion", PlayMotionAction)
+        # self.pi
+        # Could be called /robotics_intro/pick_srv
         if not self.play_motion_ac.wait_for_server(rospy.Duration(1000)):
             rospy.logerr("%s: Could not connect to /play_motion action server", self.node_name)
             exit()
@@ -57,9 +60,25 @@ class StateMachine(object):
     def check_states(self):
 
         while not rospy.is_shutdown() and self.state != 4:
-
-            # Turn around
             if self.state == 0:
+                try:
+                    rospy.loginfo("%s: Lowering robot head", self.node_name)
+                    pick_cube_srv = rospy.ServiceProxy(self.pick_cube_srv_nm, SetBool)
+                    pick_cube_req = pick_cube_srv(True)
+
+                    if pick_cube_req.success == True:
+                        self.state = 4
+                        rospy.loginfo("%s: Pick Cube succeded!", self.node_name)
+                    else:
+                        rospy.loginfo("%s: Move head down failed!", self.node_name)
+                        self.state = 5
+
+                    rospy.sleep(3)
+
+                except rospy.ServiceException, e:
+                    print "Service call to move_head server failed: %s" % e
+            # Turn around
+            if self.state == 1:
                 move_msg = Twist()
                 move_msg.angular.z = -1
 
@@ -72,11 +91,11 @@ class StateMachine(object):
                     rate.sleep()
                     cnt = cnt + 1
 
-                self.state = 1
+                self.state = 2
                 rospy.sleep(1)
 
             # Move towards the table
-            if self.state == 1:
+            if self.state == 2:
                 move_msg = Twist()
                 move_msg.linear.x = 1
 
@@ -89,7 +108,7 @@ class StateMachine(object):
                     rate.sleep()
                     cnt = cnt + 1
 
-                self.state = 2
+                self.state = 3
                 rospy.sleep(1)
             # # State 1:  Tuck arm
             # if self.state == 1:
@@ -134,7 +153,23 @@ class StateMachine(object):
             #
             #     self.state = 3
             #     rospy.sleep(1)
-
+            # if self.state == 3:
+            #    try:
+            #        rospy.loginfo("%s: Lowering robot head", self.node_name)
+            #        move_head_srv = rospy.ServiceProxy(self.mv_head_srv_nm, MoveHead)
+            #        move_head_req = move_head_srv("down")
+            #
+            #        if move_head_req.success == True:
+            #            self.state = 4
+            #            rospy.loginfo("%s: Move head down succeded!", self.node_name)
+            #        else:
+            #            rospy.loginfo("%s: Move head down failed!", self.node_name)
+            #            self.state = 5
+            #
+            #        rospy.sleep(3)
+            #
+            #    except rospy.ServiceException, e:
+            #        print "Service call to move_head server failed: %s"%e
             # Error handling
             if self.state == 5:
                 rospy.logerr("%s: State machine failed. Check your code and try again!", self.node_name)

@@ -99,6 +99,7 @@ class PickAndPlaceServer(object):
 		self.object_width = 0.05
 		self.object_depth = 0.05
 		self.pick_pose = rospy.get_param('~pickup_marker_pose')
+		rospy.loginfo("Pick pose {}".format(self.pick_pose))
 		self.place_pose = rospy.get_param('~place_marker_pose')
 
 		rospy.loginfo("%s: Waiting for pickup action server...", self.node_name)
@@ -134,6 +135,7 @@ class PickAndPlaceServer(object):
 		else:
 			rospy.loginfo("Found links to allow contacts: " + str(self.links_to_allow_contact))
 
+		rospy.loginfo("------Setting up action clients")
 		self.pick_as = SimpleActionServer(self.pick_pose, PickUpPoseAction,
 			execute_cb=self.pick_cb, auto_start=False)
 		self.pick_as.start()
@@ -141,6 +143,7 @@ class PickAndPlaceServer(object):
 		self.place_as = SimpleActionServer(self.place_pose, PickUpPoseAction,
 			execute_cb=self.place_cb, auto_start=False)
 		self.place_as.start()
+		rospy.loginfo("------Action clients set up")
 
 	def pick_cb(self, goal):
 		"""
