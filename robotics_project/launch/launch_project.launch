@@ -3,7 +3,7 @@
 
   <!-- ROS PARAMETERS -->
   <!-- Initial robot pose in Gazebo: change for levels A, C or E (F for demo)-->
-  <arg name="student_level"         default="F"/>
+  <arg name="student_level"         default="C"/>
 
   <!-- System level -->
   <arg name="namespace_tiago"     default="/"/>
@@ -75,7 +75,7 @@
 
   <group ns="$(arg namespace_project)">
     <!-- Mission planner -->
-    <node pkg="robotics_project" type="bt_students.py" name="logic_state_machine" output="screen">
+    <node pkg="robotics_project" type="sm_students.py" name="logic_state_machine" output="screen">
       <param name="global_loc_srv" value=""/>
       <param name="clear_costmaps_srv"  value=""/>
       <param name="pick_srv"            value="/$(arg namespace_project)/pick_cube_gui"/>
@@ -84,10 +84,10 @@
       <param name="cmd_vel_topic"       value="/key_vel"/>
       <param name="move_base_frame"     value=""/>
       <param name="pick_pose_topic"     value="/pick_pose_topic"/>
-      <param name="place_pose_topic"    value=""/>
+      <param name="place_pose_topic"    value="/place_pose_topic"/>
       <param name="aruco_pose_topic"    value="/$(arg namespace_project)/marker_pose_gui"/>
       <param name="cube_pose"           value="0.50306828716, 0.0245718046511, 0.915538062216, 0.0144467629456, 0.706141958739, 0.707257659069, -0.0306827123383"/>
-      <param name="robot_base_frame"          value="robot_frame" />
+      <param name="robot_base_frame"          value="base_footprint" />
       <param name="move_head_srv"       value="/$(arg namespace_project)/move_head_gui"/>
       <param name="amcl_estimate"  value="" />
       <param name="move_base_feedback"  value="" />
@@ -115,11 +115,11 @@
     <!-- Aruco marker detector -->
     <node pkg="aruco_ros" type="single"  name="aruco_single" output="screen">
         <param name="camera_frame"        value="xtion_rgb_optical_frame"/>
-        <param name="aruco_frame"        value="" />
+        <param name="aruco_frame"        value="arson" />
         <remap from="/camera_info"        to="/xtion/rgb/camera_info" />
         <remap from="/image"              to="/xtion/rgb/image_rect_color" />
         <param name="marker_pose_topic"   value="/$(arg namespace_project)/marker_pose_gui"/>
-        <param name="robot_base_frame"          value="robot_frame"/>
+        <param name="robot_base_frame"          value="base_footprint"/>
     </node>
   </group>
 

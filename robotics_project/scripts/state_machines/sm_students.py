@@ -69,10 +69,11 @@ class StateMachine(object):
         self.state = 0
         self.states = {
             0: self.tuckArm,
-            1: self.pickUpCube,
-            2: self.turnAround,
-            3: self.moveToTable,
-            4: self.placeCube,
+            1: self.headDown,
+            2: self.pickUpCube,
+            3: self.turnAround,
+            4: self.moveToTable,
+            5: self.placeCube,
         }
         rospy.sleep(3)
         self.check_states()
@@ -96,7 +97,7 @@ class StateMachine(object):
         rospy.sleep(1)
 
     def pickUpCube(self):
-        self.pick_cube_pub.publish(self.cube_pose_stamped)
+        # self.pick_cube_pub.publish(self.cube_pose_stamped)
         try:
             rospy.loginfo("%s: Picking up cube...", self.node_name)
             pick_cube_srv = rospy.ServiceProxy(self.pick_cube_srv_nm, SetBool)
@@ -119,13 +120,31 @@ class StateMachine(object):
         converged = False
         cnt = 0
         rospy.loginfo("%s: Turning around", self.node_name)
-        while not rospy.is_shutdown() and cnt < 31:
+        while not rospy.is_shutdown() and cnt < 30:
             self.cmd_vel_pub.publish(move_msg)
             rate.sleep()
             cnt = cnt + 1
 
         self.state += 1
         rospy.sleep(1)
+
+    def headDown(self):
+        try:
+            rospy.loginfo("%s: Lowering robot head", self.node_name)
+            move_head_srv = rospy.ServiceProxy(self.mv_head_srv_nm, MoveHead)
+            move_head_req = move_head_srv("down")
+
+            if move_head_req.success:
+                self.state += 1
+                rospy.loginfo("%s: Move head down succeded!", self.node_name)
+            else:
+                rospy.loginfo("%s: Move head down failed!", self.node_name)
+                self.state = -1
+
+            rospy.sleep(3)
+
+        except rospy.ServiceException, e:
+            print "Service call to move_head server failed: %s" % e
 
     def moveToTable(self):
         move_msg = Twist()
