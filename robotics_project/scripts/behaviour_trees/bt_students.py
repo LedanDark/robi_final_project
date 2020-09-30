@@ -10,32 +10,24 @@ class BehaviourTree(ptr.trees.BehaviourTree):
     def __init__(self):
         rospy.loginfo("Initialising behaviour tree")
 
-        # go to door until at door
-        b0 = pt.composites.Selector(
-            name="Go to door fallback",
-            children=[counter(30, "At door?"), go("Go to door!", 1, 0)]
-        )
-
-        # tuck the arm
-        b1 = tuckarm()
-
         # go to table
-        b2 = pt.composites.Selector(
-            name="Go to table fallback",
-            children=[counter(5, "At table?"), go("Go to table!", 0, -1)]
+        turnAround = pt.composites.Selector(
+            name="Go turn around fallback",
+            children=[counter(29, "At table?"), go("Go to table!", 0, -1)]
         )
 
         # move to chair
-        b3 = pt.composites.Selector(
-            name="Go to chair fallback",
-            children=[counter(13, "At chair?"), go("Go to chair!", 1, 0)]
+        moveToTable = pt.composites.Selector(
+            name="Go to table fallback",
+            children=[counter(10, "At chair?"), go("Go to chair!", 1, 0)]
         )
 
         # lower head
-        b4 = movehead("down")
+        headDown = movehead("down")
 
         # become the tree
-        tree = RSequence(name="Main sequence", children=[b0, b1, b2, b3, b4])
+        tree = RSequence(name="Main sequence",
+                         children=[tuckarm(), headDown, pickUpCube(), turnAround, moveToTable, placeDownCube()])
         super(BehaviourTree, self).__init__(tree)
 
         # execute the behaviour tree
