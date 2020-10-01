@@ -17,7 +17,7 @@
 
 
   <!-- Navigation -->
-  <arg name="provide_map"     default="false"/>
+  <arg name="provide_map"     default="true"/>
   <arg name="localization"    default="amcl"/>
   <arg name="map_path"        default="$(find robotics_project)/pal/tiago_maps/config"/>
   <arg name="global_planner"  default="navfn"/>
@@ -50,27 +50,27 @@
     </node> -->
 
     <!-- Project RGBD point cloud to laser-scan -->
-<!--     <include file="$(find tiago_laser_sensors)/launch/rgbd_depth_laser.launch"> -->
-<!--       <arg name="image"     value="xtion/depth_registered/image_raw"/> -->
-<!--       <arg name="scan"      value="rgbd_scan"/> -->
-<!--       <arg name="multiple"  value="$(arg multiple)"/> -->
-<!--       <arg name="tf_prefix" value="$(arg tf_prefix)"/> -->
-<!--     </include> -->
+    <include file="$(find tiago_laser_sensors)/launch/rgbd_depth_laser.launch">
+      <arg name="image"     value="xtion/depth_registered/image_raw"/>
+      <arg name="scan"      value="rgbd_scan"/>
+      <arg name="multiple"  value="$(arg multiple)"/>
+      <arg name="tf_prefix" value="$(arg tf_prefix)"/>
+    </include>
 
     <!-- AMCL Localization -->
-<!--     <include file="$(find tiago_2dnav)/launch/localization_$(arg localization).launch"> -->
-<!--       <arg name="multiple"  value="$(arg multiple)"/> -->
-<!--       <arg name="tf_prefix" value="$(arg tf_prefix)"/> -->
-<!--     </include> -->
+    <include file="$(find tiago_2dnav)/launch/localization_$(arg localization).launch">
+      <arg name="multiple"  value="$(arg multiple)"/>
+      <arg name="tf_prefix" value="$(arg tf_prefix)"/>
+    </include>
 
     <!-- Planning: move_base stack -->
-<!--     <include file="$(find tiago_2dnav)/launch/move_$(arg planner).launch"> -->
-<!--       <arg name="global_planner" value="$(arg global_planner)"/> -->
-<!--       <arg name="local_planner"  value="$(arg local_planner)"/> -->
-<!--       <arg name="public_sim"     value="$(arg public_sim)"/> -->
-<!--       <arg name="tf_prefix"      value="$(arg tf_prefix)"/> -->
-<!--       <arg name="multiple"       value="$(arg multiple)"/> -->
-<!--     </include> -->
+    <include file="$(find tiago_2dnav)/launch/move_$(arg planner).launch">
+      <arg name="global_planner" value="$(arg global_planner)"/>
+      <arg name="local_planner"  value="$(arg local_planner)"/>
+      <arg name="public_sim"     value="$(arg public_sim)"/>
+      <arg name="tf_prefix"      value="$(arg tf_prefix)"/>
+      <arg name="multiple"       value="$(arg multiple)"/>
+    </include>
   </group>
 
   <group ns="$(arg namespace_project)">
@@ -81,7 +81,7 @@
       <param name="pick_srv"            value="/$(arg namespace_project)/pick_cube_gui"/>
       <param name="place_srv"           value="/$(arg namespace_project)/place_cube_gui"/>
       <param name="nav_goal_topic"      value=""/>
-      <param name="cmd_vel_topic"       value="/key_vel"/>
+      <param name="cmd_vel_topic"       value="/mobile_base_controller/cmd_vel"/>
       <param name="move_base_frame"     value=""/>
       <param name="pick_pose_topic"     value="/pick_pose_topic"/>
       <param name="place_pose_topic"    value="/place_pose_topic"/>
@@ -99,7 +99,7 @@
       <param name="place_pose"        value="2.6009, -1.7615, 0.0, 0.0, 0.0, 0.0, 1"/>
       <param name="pick_pose_topic"   value="/pick_pose_topic"/>
       <param name="place_pose_topic"  value="/place_pose_topic"/>
-      <param name="map_frame"   value="/$(arg tf_prefix)/map"/>
+      <param name="map_frame"   value="/map"/>
     </node>
 
     <!-- Node exposing service to trigger the pick and place -->
@@ -133,9 +133,9 @@
 
 
   <!-- Map providers -->
-<!--   <group if="$(arg provide_map)">
+  <group if="$(arg provide_map)">
     <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_path)/map.yaml"/>
     <node name="relay_map" pkg="topic_tools" type="relay" args="/map /vo_map"/>
-  </group> -->
+  </group>
 
 </launch>

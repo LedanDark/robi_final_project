@@ -43,8 +43,8 @@ class go(pt.behaviour.Behaviour):
         rospy.loginfo("Initialising go behaviour.")
 
         # action space
-        # self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
-        self.cmd_vel_top = "/key_vel"
+        self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
+        # self.cmd_vel_top = "/key_vel"
         # rospy.loginfo(self.cmd_vel_top)
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_top, Twist, queue_size=10)
 
@@ -191,6 +191,7 @@ class placeDownCube(pt.behaviour.Behaviour):
 
             # Pick up cube
             rospy.loginfo("%s: Placing cube down...")
+            rospy.sleep(1)
             self.pick_cube_req = self.place_cube_Srv(True)
             self.tried = True
 
