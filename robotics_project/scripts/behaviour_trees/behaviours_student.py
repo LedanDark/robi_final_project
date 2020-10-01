@@ -248,6 +248,7 @@ class movehead(pt.behaviour.Behaviour):
 
             # command
             self.move_head_req = self.move_head_srv(self.direction)
+            rospy.sleep(1)
             self.tried = True
 
             # tell the tree you're running
