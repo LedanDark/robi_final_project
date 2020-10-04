@@ -15,8 +15,8 @@ from actionlib import SimpleActionClient
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from nav_msgs.msg import Odometry
 
-
 from moveit_msgs.msg import MoveItErrorCodes
+
 moveit_error_dict = {}
 for name in MoveItErrorCodes.__dict__.keys():
     if not name[:1] == '_':
@@ -25,11 +25,13 @@ for name in MoveItErrorCodes.__dict__.keys():
 
 previous_state = None
 
+
 class StateMachine(object):
 
     def aruco_pose_cb(self, aruco_pose_msg):
         self.aruco_pose = aruco_pose_msg
         self.aruco_pose_rcv = True
+
     def gripper_cb(self, joint_state_msg):
         self.left_gripper = joint_state_msg.position[7]
         self.right_gripper = joint_state_msg.position[8]
@@ -182,7 +184,7 @@ class StateMachine(object):
                     rospy.sleep(3)
 
                 except rospy.ServiceException, e:
-                    print "Service call to move_head server failed: %s"%e
+                    print "Service call to move_head server failed: %s" % e
 
             # State 4:  Pick up the cube service
             if self.state == 4:
@@ -202,14 +204,35 @@ class StateMachine(object):
                     rospy.sleep(3)
 
                 except rospy.ServiceException, e:
-                    print "Service call to pick_up server failed: %s"%e
+                    print "Service call to pick_up server failed: %s" % e
 
             # State 5:  Navigate to table A
             if self.state == 5:
                 rospy.loginfo("%s: Navigating to table...", self.node_name)
                 pose = rospy.wait_for_message(self.plcpose_top, PoseStamped, 5)
-                goal = MoveBaseGoal()
+                self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
+                # self.cmd_vel_top = "/key_vel"
+                # rospy.loginfo(self.cmd_vel_top)
+                move_msg = Twist()
+                move_msg.linear.x = -1
+                self.cmd_vel_pub.publish(move_msg)
+                rospy.sleep(2)
 
+                move_head_srv = rospy.ServiceProxy(self.mv_head_srv_nm, MoveHead)
+                move_head_req = move_head_srv("up")
+                rospy.sleep(1)
+                rospy.loginfo("%s: Doing a Barrel Roll...", self.node_name)
+                rate = rospy.Rate(10)
+
+                while not rospy.is_shutdown() and cnt < 60:
+                    self.cmd_vel_pub.publish(move_msg)
+                    rate.sleep()
+                    cnt = cnt + 1
+
+                clear_costmap_srv = rospy.ServiceProxy(self.clrcstmp_srv, Empty)
+                clear_costamp_req = clear_costmap_srv()
+
+                goal = MoveBaseGoal()
                 goal.target_pose = pose
                 self.move_base_ac.send_goal(goal)
                 success_navigation = self.move_base_ac.wait_for_result(rospy.Duration(120.0))
@@ -226,13 +249,12 @@ class StateMachine(object):
 
                 rospy.sleep(1)
 
-
             # State 6:  Place the cube service
             if self.state == 6:
                 try:
                     rospy.loginfo("%s: Placing the cube...", self.node_name)
                     place_srv = rospy.ServiceProxy(self.plc_srv, SetBool)
-                    place_req = place_srv()
+                    place_req = place_srv(True)
 
                     if place_req.success == True:
                         previous_state = 6
@@ -246,7 +268,7 @@ class StateMachine(object):
                     rospy.sleep(3)
 
                 except rospy.ServiceException, e:
-                    print "Service call to pick_up server failed: %s"%e
+                    print "Service call to pick_up server failed: %s" % e
 
             # State 7: Detect the cube
             if self.state == 7:
@@ -270,7 +292,6 @@ class StateMachine(object):
                     rospy.sleep(1)
 
                 if previous_state == 4:
-                    # if self.left_gripper > 0.02 and self.right_gripper > 0.02:
                     rospy.loginfo("%s: Pick up succeded!", self.node_name)
                     move_head_srv = rospy.ServiceProxy(self.mv_head_srv_nm, MoveHead)
                     move_head_req = move_head_srv("up")
@@ -278,10 +299,6 @@ class StateMachine(object):
                     clear_costamp_req = clear_costmap_srv()
                     previous_state = 7
                     self.state = 5
-                    # else:
-                    #     rospy.loginfo("%s: ATTENTION: CUBE DROPPED!", self.node_name)
-                    #     previous_state = 7
-                    #     self.state = 404
 
                 if previous_state == 6:
                     try:
@@ -295,11 +312,11 @@ class StateMachine(object):
                             rospy.loginfo("spherical_grasp_gui: Waiting for an aruco detection...")
                             rospy.sleep(1.0)
 
-                        if cnt < 5 :
+                        if cnt < 5:
                             rospy.loginfo("%s: CUBE DETECTED!", self.node_name)
                             previous_state = 7
                             self.state = 50
-                        else :
+                        else:
                             rospy.loginfo("%s: Cannot find the cube...", self.node_name)
                             previous_state = 7
                             self.state = 404
@@ -307,7 +324,7 @@ class StateMachine(object):
                         rospy.sleep(3)
 
                     except rospy.ServiceException, e:
-                        print "Service call to pick_up server failed: %s"%e
+                        print "Service call to pick_up server failed: %s" % e
 
             # Error handling
 
@@ -328,4 +345,3 @@ if __name__ == "__main__":
         pass
 
     rospy.spin()
-

@@ -4,11 +4,12 @@
 
 
 import py_trees as pt, py_trees_ros as ptr, rospy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, PoseStamped
 from actionlib import SimpleActionClient
+from move_base_msgs.msg import MoveBaseGoal, MoveBaseAction
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
 from robotics_project.srv import MoveHead, MoveHeadRequest, MoveHeadResponse
-from std_srvs.srv import SetBool
+from std_srvs.srv import SetBool, Empty
 
 
 class counter(pt.behaviour.Behaviour):
@@ -44,8 +45,6 @@ class go(pt.behaviour.Behaviour):
 
         # action space
         self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
-        # self.cmd_vel_top = "/key_vel"
-        # rospy.loginfo(self.cmd_vel_top)
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_top, Twist, queue_size=10)
 
         # command
@@ -267,3 +266,78 @@ class movehead(pt.behaviour.Behaviour):
         # if still trying
         else:
             return pt.common.Status.RUNNING
+
+
+class moveTo(pt.behaviour.Behaviour):
+    def __init__(self, given_topic):
+        self.move_base_ac = SimpleActionClient("/move_base", MoveBaseAction)
+        if not self.move_base_ac.wait_for_server(rospy.Duration(1000)):
+            rospy.logerr("%s: Could not connect to /move_base action server")
+            exit()
+
+        self.navigation_result = None  # Before done, we dont know the result
+        self.tried = False
+        self.done = False
+        self.pose_topic = given_topic
+        super(moveTo, self).__init__("Ready to move!")
+
+    def update(self):
+        # success if done
+        if self.done:  ##Could use current location to check if at desired position.
+            return self.navigation_result
+        # try if not tried
+        elif not self.tried:
+            pose = rospy.wait_for_message(self.pose_topic, PoseStamped, 7)
+            goal = MoveBaseGoal()
+            goal.target_pose = pose
+            self.move_base_ac.send_goal(goal, done_cb=self.doneNavigating)
+            self.tried = True
+
+            return pt.common.Status.RUNNING
+
+        # if still trying
+        else:
+            return pt.common.Status.RUNNING
+
+    def doneNavigating(self,a,b):
+        self.done = True
+        result = self.move_base_ac.get_result()
+        if not result:
+            self.move_base_ac.cancel_goal()
+            rospy.loginfo("Failed to reach desired position!")
+            self.navigation_result = pt.common.Status.FAILURE
+        else:
+            rospy.loginfo("Reached goal position!")
+            self.navigation_result = pt.common.Status.SUCCESS
+
+
+class localizeSetup(pt.behaviour.Behaviour):
+    def __init__(self):
+        self.localize_service = rospy.ServiceProxy(rospy.get_param(rospy.get_name() + '/global_loc_srv'), Empty)
+        self.tried = False
+        self.done = False
+        super(localizeSetup, self).__init__("Ready to localize")
+
+    def update(self):
+        if not self.tried:
+            localize_req = self.localize_service()
+            self.tried = True
+            return pt.common.Status.RUNNING
+        else:
+            return pt.common.Status.SUCCESS
+
+
+class clearCostmaps(pt.behaviour.Behaviour):
+    def __init__(self):
+        self.clear_costmap_srv = rospy.ServiceProxy(rospy.get_param(rospy.get_name() + '/clear_costmaps_srv'), Empty)
+        self.tried = False
+        self.done = False
+        super(clearCostmaps, self).__init__("Ready to localize")
+
+    def update(self):
+        if not self.tried:
+            req = self.clear_costmap_srv()
+            self.tried = True
+            return pt.common.Status.RUNNING
+        else:
+            return pt.common.Status.SUCCESS
