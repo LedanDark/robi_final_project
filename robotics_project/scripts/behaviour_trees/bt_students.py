@@ -26,7 +26,7 @@ class BehaviourTree(ptr.trees.BehaviourTree):
         # move backwards
         moveBackwards = pt.composites.Selector(
             name="Go backwards",
-            children=[counter(2, "Away from table?"), go("Fall back from chair", 1, 0)]
+            children=[counter(2, "Away from table?"), go("Fall back from chair", -1, 0)]
         )
 
         # become the tree

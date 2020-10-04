@@ -204,6 +204,7 @@ class placeDownCube(pt.behaviour.Behaviour):
 
         # if failed
         elif not self.pick_cube_req.success:
+            rospy.loginfo("Failure....")
             return pt.common.Status.FAILURE
 
         # if still trying
@@ -279,7 +280,7 @@ class moveTo(pt.behaviour.Behaviour):
         self.tried = False
         self.done = False
         self.pose_topic = given_topic
-        super(moveTo, self).__init__("Ready to move!")
+        super(moveTo, self).__init__("Moving to "+given_topic)
 
     def update(self):
         # success if done
@@ -300,8 +301,8 @@ class moveTo(pt.behaviour.Behaviour):
             return pt.common.Status.RUNNING
 
     def doneNavigating(self,a,b):
-        self.done = True
         result = self.move_base_ac.get_result()
+        rospy.loginfo("Callback on navigation")
         if not result:
             self.move_base_ac.cancel_goal()
             rospy.loginfo("Failed to reach desired position!")
@@ -309,6 +310,7 @@ class moveTo(pt.behaviour.Behaviour):
         else:
             rospy.loginfo("Reached goal position!")
             self.navigation_result = pt.common.Status.SUCCESS
+        self.done = True
 
 
 class localizeSetup(pt.behaviour.Behaviour):
