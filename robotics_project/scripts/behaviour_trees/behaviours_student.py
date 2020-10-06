@@ -95,7 +95,8 @@ class localizeBehaviour(pt.behaviour.Behaviour):
             rospy.loginfo("Calling localize service")
             # TODO : Check if this is too fast
             self.localize_service()
-            self.rate.sleep()
+            rospy.sleep(1)
+            rospy.loginfo("xxxxxxxxxxxLocalize done")
             self.localizeCalled = True
         elif not self.spunAround:
             # spin around
@@ -106,7 +107,7 @@ class localizeBehaviour(pt.behaviour.Behaviour):
         else:
             rospy.loginfo("Calling clear costmap service")
             self.clear_costmap_srv()
-            self.rate.sleep()
+            rospy.loginfo("xxxxxxxxxxxCostmap cleared")
             self.blackboard.localizationDone = True
             self.blackboard.mapIsDirty = False
         if self.blackboard.localizationDone:
@@ -171,7 +172,6 @@ class retrieveCube(pt.behaviour.Behaviour):
         self.cubePickedUp = False
         self.movedBack = False
         self.counter = 0
-        pass
 
     def update(self):
         if self.movedBack:
@@ -199,7 +199,7 @@ class retrieveCube(pt.behaviour.Behaviour):
             self.rate.sleep()
             self.counter += 1
             self.movedBack = self.counter >= 3
-            pass
+            self.blackboard.cubeLocation = "Hand"
         return pt.common.Status.RUNNING
 
 
@@ -238,6 +238,7 @@ class tuckarm(pt.behaviour.Behaviour):
         elif not self.sent_goal:
 
             # send the goal
+            rospy.loginfo("Tucking our arm...")
             self.play_motion_ac.send_goal(self.goal)
             self.sent_goal = True
 
@@ -341,6 +342,7 @@ class placeDownCube(pt.behaviour.Behaviour):
 
         # if failed
         elif not self.pick_cube_req.success:
+            rospy.loginfo("SIMULATION FATAL ERROR: UNABLE TO MOVE ARMS. RESET SIMULATION")
             return pt.common.Status.FAILURE
 
         # if still trying
@@ -383,6 +385,7 @@ class movehead(pt.behaviour.Behaviour):
         elif not self.tried:
 
             # command
+            rospy.loginfo("moving the head {}".format(self.direction))
             self.move_head_req = self.move_head_srv(self.direction)
             rospy.sleep(1)
             self.tried = True
@@ -420,10 +423,11 @@ class moveTo(pt.behaviour.Behaviour):
 
     def update(self):
         # success if done
-        if self.done:  ##Could use current location to check if at desired position.
+        if self.status != pt.common.Status.INVALID and self.done:  ##Could use current location to check if at desired position.
             return self.navigation_result
         # try if not tried
         elif not self.tried:
+            rospy.loginfo("Moving to goal...")
             pose = rospy.wait_for_message(self.pose_topic, PoseStamped, 7)
             goal = MoveBaseGoal()
             goal.target_pose = pose
@@ -439,10 +443,16 @@ class moveTo(pt.behaviour.Behaviour):
     def terminate(self, new_status):
         if new_status == pt.common.Status.FAILURE:
             # reset this node, and mark map as dirty
+            rospy.loginfo("  %s [%s->%s]" % (self.name, self.status, new_status))
+            # self.move_base_ac.cancel_all_goals()
             self.blackboard.mapIsDirty = True
+            rospy.sleep(1)
             self.tried = False
             self.done = False
-            rospy.loginfo("  %s [Foo::terminate().terminate()][%s->%s]" % (self.name, self.status, new_status))
+        elif new_status == pt.common.Status.INVALID and not self.done:
+            rospy.loginfo("  %s [%s->%s]" % (self.name, self.status, new_status))
+            # self.move_base_ac.cancel_all_goals()
+            self.tried = False
 
     def doneNavigating(self, state, result):
 
@@ -450,10 +460,36 @@ class moveTo(pt.behaviour.Behaviour):
         rospy.loginfo("-------------------------------Callback on navigation")
         # We get state == 3 when we achieve our goal position....
         if not (state == 3):
-            self.move_base_ac.cancel_goal()
+            # self.move_base_ac.cancel_all_goals()
             rospy.loginfo("Failed to reach desired position!")
             self.navigation_result = pt.common.Status.FAILURE
         else:
-            rospy.loginfo("Reached goal position!")
+            if self.pose_topic == "/pick_pose_topic":
+                rospy.loginfo("Reached goal position!  -------- A")
+                self.blackboard.robotLocation = "A"
+            else:
+                rospy.loginfo("Reached goal position!  -------- B")
+                self.blackboard.robotLocation = "B"
             self.navigation_result = pt.common.Status.SUCCESS
         self.done = True
+
+
+class missionChecker(pt.behaviour.Behaviour):
+    def __init__(self):
+        self.blackboard = pt.blackboard.Blackboard()
+        self.aruco_pose_top = rospy.get_param(rospy.get_name() + '/aruco_pose_topic')
+        self.aruco_pose_subs = None
+        self.tried = False
+        super(missionChecker, self).__init__("Checking for cube")
+
+    def update(self):
+        if not self.tried:
+            self.aruco_pose_subs = rospy.Subscriber(self.aruco_pose_top, PoseStamped, self.aruco_pose_cb)
+            self.tried = True
+        elif self.blackboard.cubeLocation == "B":
+            rospy.loginfo("++++++++++++++Great success!+++++++++++++")
+            return pt.common.Status.SUCCESS
+        return pt.common.Status.FAILURE
+
+    def aruco_pose_cb(self, aruco_pose_msg):
+        self.blackboard.cubeLocation = self.blackboard.robotLocation

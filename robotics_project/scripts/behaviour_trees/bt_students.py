@@ -15,28 +15,27 @@ class BehaviourTree(ptr.trees.BehaviourTree):
         blackboard = py_trees.blackboard.Blackboard()
         blackboard.mapIsDirty = True
         blackboard.headState = None
+        blackboard.cubeLocation = "A"  # A, Hand, or B
+        blackboard.robotLocation = None  # None, A, or B
         # lower head
         headDown = movehead("down")
 
-        # localization, headUp and spin
-
-        # move backwards
-        moveBackwards = pt.composites.Selector(
-            name="Go backwards",
-            children=[counter(2, "Away from table?"), go("Fall back from chair", -1, 0)]
-        )
         # become the tree
-        tree = RSequence(name="Main sequence",
-                         children=[tuckarm(),
-                                   localization(),
-                                   moveTo("/pick_pose_topic"),
-                                   retrieveCube(),
-                                   moveTo("/place_pose_topic"),
-                                   placeDownCube()])
+        relocateCube = RSequence(name="Cube sequence",
+                                 children=[tuckarm(),
+                                           localization(),
+                                           moveTo("/pick_pose_topic"),
+                                           retrieveCube(),
+                                           moveTo("/place_pose_topic"),
+                                           placeDownCube(),
+                                           movehead("down")
+                                           ])
+        tree = pt.composites.Selector(name="Main sequence",
+                                      children=[missionChecker(), relocateCube]
+                                      )
         super(BehaviourTree, self).__init__(tree)
-
         # execute the behaviour tree
-        move_head_srv("up") #ensure head is up before starting, otherwise need to reset gazebo every time.
+        move_head_srv("up")  # ensure head is up before starting, otherwise need to reset gazebo every time.
         rospy.sleep(5)
         self.setup(timeout=10000)
         while not rospy.is_shutdown():
