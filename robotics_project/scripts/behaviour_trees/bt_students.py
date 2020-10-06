@@ -9,7 +9,9 @@ class BehaviourTree(ptr.trees.BehaviourTree):
 
     def __init__(self):
         rospy.loginfo("Initialising behaviour tree")
-
+        # Reset head up for gazebo simulation failures to reset robot configuration.
+        mv_head_srv_nm = rospy.get_param(rospy.get_name() + '/move_head_srv')
+        move_head_srv = rospy.ServiceProxy(mv_head_srv_nm, MoveHead)
         blackboard = py_trees.blackboard.Blackboard()
         blackboard.mapIsDirty = True
         blackboard.headState = None
@@ -25,12 +27,16 @@ class BehaviourTree(ptr.trees.BehaviourTree):
         )
         # become the tree
         tree = RSequence(name="Main sequence",
-                         children=[movehead("up"), tuckarm(), localization(), moveTo("/pick_pose_topic"), headDown,
-                                   pickUpCube(), movehead("up"), moveBackwards, moveTo("/place_pose_topic"),
+                         children=[tuckarm(),
+                                   localization(),
+                                   moveTo("/pick_pose_topic"),
+                                   retrieveCube(),
+                                   moveTo("/place_pose_topic"),
                                    placeDownCube()])
         super(BehaviourTree, self).__init__(tree)
 
         # execute the behaviour tree
+        move_head_srv("up") #ensure head is up before starting, otherwise need to reset gazebo every time.
         rospy.sleep(5)
         self.setup(timeout=10000)
         while not rospy.is_shutdown():

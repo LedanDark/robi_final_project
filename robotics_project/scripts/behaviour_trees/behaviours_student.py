@@ -146,6 +146,63 @@ class isMapDirty(pt.behaviour.Behaviour):
         self.previousCovariance = covariance
 
 
+class retrieveCube(pt.behaviour.Behaviour):
+
+    def __init__(self):
+        self.blackboard = pt.blackboard.Blackboard()
+        pick_cube_srv_nm = rospy.get_param(rospy.get_name() + '/pick_srv')
+        mv_head_srv_nm = rospy.get_param(rospy.get_name() + '/move_head_srv')
+        self.move_head_srv = rospy.ServiceProxy(mv_head_srv_nm, MoveHead)
+        self.pick_cube_srv = rospy.ServiceProxy(pick_cube_srv_nm, SetBool)
+        self.rate = rospy.Rate(10)
+        self.reset()
+        self.move_msg = Twist()
+        self.move_msg.linear.x = -1
+        self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
+        self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_top, Twist, queue_size=10)
+        rospy.wait_for_service(mv_head_srv_nm, timeout=30)
+        rospy.wait_for_service(pick_cube_srv_nm, timeout=30)
+        self.reset()
+        super(retrieveCube, self).__init__("Retrieve cube")
+
+    def reset(self):
+        self.headPlacedDown = False
+        self.headPlacedUp = False
+        self.cubePickedUp = False
+        self.movedBack = False
+        self.counter = 0
+        pass
+
+    def update(self):
+        if self.movedBack:
+            return pt.common.Status.SUCCESS
+        if not self.headPlacedDown:
+            rospy.loginfo("%s: Head down for cube pickup..")
+            self.move_head_req = self.move_head_srv("down")
+            self.rate.sleep()
+            self.headPlacedDown = True
+        elif not self.cubePickedUp:
+            rospy.loginfo("%s: Picking up cube...")
+            self.pick_cube_req = self.pick_cube_srv(True)
+            if not self.pick_cube_req:
+                rospy.loginfo("%s: FATAL ERROR -- FAILED TO PICK UP CUBE")
+                return pt.common.Status.FAILURE
+            self.cubePickedUp = True
+        elif not self.headPlacedUp:
+            rospy.loginfo("%s: Head up for navigation..")
+            self.move_head_req = self.move_head_srv("up")
+            self.rate.sleep()
+            self.headPlacedUp = True
+        elif not self.movedBack:
+            rospy.loginfo("Moving backwards to avoid smacking into table...")
+            self.cmd_vel_pub.publish(self.move_msg)
+            self.rate.sleep()
+            self.counter += 1
+            self.movedBack = self.counter >= 3
+            pass
+        return pt.common.Status.RUNNING
+
+
 class tuckarm(pt.behaviour.Behaviour):
     """
     Sends a goal to the tuck arm action server.
@@ -293,7 +350,7 @@ class placeDownCube(pt.behaviour.Behaviour):
 
 class movehead(pt.behaviour.Behaviour):
     """
-    Lowers or raisesthe head of the robot.
+    Lowers or raises the head of the robot.
     Returns running whilst awaiting the result,
     success if the action was succesful, and v.v..
     """
