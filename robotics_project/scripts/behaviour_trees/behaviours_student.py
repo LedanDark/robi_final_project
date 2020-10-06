@@ -1,10 +1,9 @@
 # Christopher Iliffe Sprague
 # sprague@kth.se
 # Behaviours needed for the example student solution.
-
-
+import numpy
 import py_trees as pt, py_trees_ros as ptr, rospy
-from geometry_msgs.msg import Twist, PoseStamped
+from geometry_msgs.msg import Twist, PoseStamped, PoseWithCovarianceStamped
 from actionlib import SimpleActionClient
 from move_base_msgs.msg import MoveBaseGoal, MoveBaseAction
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
@@ -65,6 +64,88 @@ class go(pt.behaviour.Behaviour):
         return pt.common.Status.RUNNING
 
 
+class localizeBehaviour(pt.behaviour.Behaviour):
+    def __init__(self):
+        self.reset()
+        self.move_msg = Twist()
+        self.move_msg.angular.z = 1
+        self.rate = rospy.Rate(10)
+        self.clear_costmap_srv = rospy.ServiceProxy(rospy.get_param(rospy.get_name() + '/clear_costmaps_srv'), Empty)
+        self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
+        self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_top, Twist, queue_size=10)
+        self.localize_service = rospy.ServiceProxy(rospy.get_param(rospy.get_name() + '/global_loc_srv'), Empty)
+        self.blackboard = pt.blackboard.Blackboard()
+        super(localizeBehaviour, self).__init__("Localize Behaviour")
+
+    def reset(self):
+        rospy.loginfo("Localizer is resetting")
+        self.localizeCalled = False
+        self.spunAround = False
+        self.counter = 0
+        self.done = False
+
+    def initialise(self):
+        # When you are "done" and the map is dirty, reset.
+        if self.done and self.blackboard.mapIsDirty:
+            self.reset()
+
+    def update(self):
+        # first, call localizeSrv
+        if not self.localizeCalled:
+            rospy.loginfo("Calling localize service")
+            # TODO : Check if this is too fast
+            self.localize_service()
+            self.rate.sleep()
+            self.localizeCalled = True
+        elif not self.spunAround:
+            # spin around
+            self.cmd_vel_pub.publish(self.move_msg)
+            self.rate.sleep()
+            self.counter += 1
+            self.spunAround = self.counter >= 60
+        else:
+            rospy.loginfo("Calling clear costmap service")
+            self.clear_costmap_srv()
+            self.rate.sleep()
+            self.done = True
+            self.blackboard.mapIsDirty = False
+        if self.done:
+            return pt.common.Status.SUCCESS
+        else:
+            return pt.common.Status.RUNNING
+
+
+class isMapDirty(pt.behaviour.Behaviour):
+    def __init__(self):
+        self.blackboard = pt.blackboard.Blackboard()
+        self.previousCovariance = None
+        self.covarianceHasJumped = False
+        self.counter = 0
+        self.subramanian = rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.pose_callback)
+        super(isMapDirty, self).__init__("Is Map clean?")
+
+    def update(self):
+        if self.blackboard.mapIsDirty:
+            return pt.common.Status.FAILURE
+        else:
+            return pt.common.Status.SUCCESS
+
+    def pose_callback(self, poseWithCovarianceStamped):
+        covariance = numpy.array(poseWithCovarianceStamped.pose.covariance)
+        if self.previousCovariance is not None:
+            dist = numpy.linalg.norm(covariance - self.previousCovariance)
+            # rospy.loginfo("Distance == {}".format(dist))
+            if dist >= 0.0025:
+                self.counter += 1
+                if self.counter >= 3:
+                    self.blackboard.mapIsDirty = True
+                    rospy.loginfo("---------------------------Map Marked As Dirty--------------------------------")
+            else:
+                self.counter = 0
+
+        self.previousCovariance = covariance
+
+
 class tuckarm(pt.behaviour.Behaviour):
     """
     Sends a goal to the tuck arm action server.
@@ -73,7 +154,6 @@ class tuckarm(pt.behaviour.Behaviour):
     """
 
     def __init__(self):
-
         rospy.loginfo("Initialising tuck arm behaviour.")
 
         # Set up action client
@@ -204,7 +284,6 @@ class placeDownCube(pt.behaviour.Behaviour):
 
         # if failed
         elif not self.pick_cube_req.success:
-            rospy.loginfo("Failure....")
             return pt.common.Status.FAILURE
 
         # if still trying
@@ -239,7 +318,6 @@ class movehead(pt.behaviour.Behaviour):
         super(movehead, self).__init__("Lower head!")
 
     def update(self):
-
         # success if done
         if self.done:
             return pt.common.Status.SUCCESS
@@ -280,7 +358,7 @@ class moveTo(pt.behaviour.Behaviour):
         self.tried = False
         self.done = False
         self.pose_topic = given_topic
-        super(moveTo, self).__init__("Moving to "+given_topic)
+        super(moveTo, self).__init__("Moving to " + given_topic)
 
     def update(self):
         # success if done
@@ -300,10 +378,11 @@ class moveTo(pt.behaviour.Behaviour):
         else:
             return pt.common.Status.RUNNING
 
-    def doneNavigating(self,a,b):
-        result = self.move_base_ac.get_result()
+    def doneNavigating(self, state, result):
+        # result = self.move_base_ac.get_result()
         rospy.loginfo("Callback on navigation")
-        if not result:
+        # We get state == 3 when we achieve our goal position....
+        if not (state == 3):
             self.move_base_ac.cancel_goal()
             rospy.loginfo("Failed to reach desired position!")
             self.navigation_result = pt.common.Status.FAILURE
@@ -317,10 +396,11 @@ class localizeSetup(pt.behaviour.Behaviour):
     def __init__(self):
         self.localize_service = rospy.ServiceProxy(rospy.get_param(rospy.get_name() + '/global_loc_srv'), Empty)
         self.tried = False
-        self.done = False
+        self.blackboard = pt.blackboard.Blackboard()
         super(localizeSetup, self).__init__("Ready to localize")
 
     def update(self):
+        rospy.loginfo("update - localizeSetup")
         if not self.tried:
             localize_req = self.localize_service()
             self.tried = True
@@ -332,14 +412,45 @@ class localizeSetup(pt.behaviour.Behaviour):
 class clearCostmaps(pt.behaviour.Behaviour):
     def __init__(self):
         self.clear_costmap_srv = rospy.ServiceProxy(rospy.get_param(rospy.get_name() + '/clear_costmaps_srv'), Empty)
-        self.tried = False
-        self.done = False
-        super(clearCostmaps, self).__init__("Ready to localize")
+        self.blackboard = pt.blackboard.Blackboard()
+        super(clearCostmaps, self).__init__("Costmaps ready to clear")
 
     def update(self):
-        if not self.tried:
+        if self.blackboard.mapIsDirty:
             req = self.clear_costmap_srv()
-            self.tried = True
+            self.blackboard.mapIsDirty = False
             return pt.common.Status.RUNNING
         else:
             return pt.common.Status.SUCCESS
+
+# class isLocalized():
+#     def __init__(self):
+#         self.previousCovariance = None
+#         self.covarianceHasJumped = False
+#         self.counter = 0
+#         self.subramanian = rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.pose_callback)
+#         # super(isLocalized, self).__init__("Checking localization")
+#
+#     # def update(self):
+#     #     # Either, covariance has jumped and localization has not be redone
+#     #     pt.common.Status.FAILURE
+#
+#     def pose_callback(self, poseWithCovarianceStamped):
+#         covariance = numpy.array(poseWithCovarianceStamped.pose.covariance)
+#         if self.previousCovariance is not None:
+#             dist = numpy.linalg.norm(covariance - self.previousCovariance)
+#             rospy.loginfo("Distance == {}".format(dist))
+#             if dist >= 0.0025:
+#                 self.counter += 1
+#                 if self.counter >= 3:
+#                     pt.blackboard.Blackboard().mapIsDirty = True
+#                     rospy.loginfo("---------------------------Map Marked As Dirty--------------------------------")
+#             else:
+#                 self.counter = 0
+#
+#         self.previousCovariance = covariance
+#         # if dist > a number, then we have jumped
+#     #     pass
+#     #
+#     # def update(self):
+#     #     return pt.common.Status.FAILURE
