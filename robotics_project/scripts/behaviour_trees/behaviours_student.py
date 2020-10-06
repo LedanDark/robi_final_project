@@ -66,6 +66,7 @@ class go(pt.behaviour.Behaviour):
 
 class localizeBehaviour(pt.behaviour.Behaviour):
     def __init__(self):
+        self.blackboard = pt.blackboard.Blackboard()
         self.reset()
         self.move_msg = Twist()
         self.move_msg.angular.z = 1
@@ -74,7 +75,6 @@ class localizeBehaviour(pt.behaviour.Behaviour):
         self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_top, Twist, queue_size=10)
         self.localize_service = rospy.ServiceProxy(rospy.get_param(rospy.get_name() + '/global_loc_srv'), Empty)
-        self.blackboard = pt.blackboard.Blackboard()
         super(localizeBehaviour, self).__init__("Localize Behaviour")
 
     def reset(self):
@@ -82,11 +82,11 @@ class localizeBehaviour(pt.behaviour.Behaviour):
         self.localizeCalled = False
         self.spunAround = False
         self.counter = 0
-        self.done = False
+        self.blackboard.localizationDone = False
 
     def initialise(self):
         # When you are "done" and the map is dirty, reset.
-        if self.done and self.blackboard.mapIsDirty:
+        if self.blackboard.localizationDone and self.blackboard.mapIsDirty:
             self.reset()
 
     def update(self):
@@ -107,9 +107,9 @@ class localizeBehaviour(pt.behaviour.Behaviour):
             rospy.loginfo("Calling clear costmap service")
             self.clear_costmap_srv()
             self.rate.sleep()
-            self.done = True
+            self.blackboard.localizationDone = True
             self.blackboard.mapIsDirty = False
-        if self.done:
+        if self.blackboard.localizationDone:
             return pt.common.Status.SUCCESS
         else:
             return pt.common.Status.RUNNING
@@ -132,7 +132,7 @@ class isMapDirty(pt.behaviour.Behaviour):
 
     def pose_callback(self, poseWithCovarianceStamped):
         covariance = numpy.array(poseWithCovarianceStamped.pose.covariance)
-        if self.previousCovariance is not None:
+        if self.previousCovariance is not None and self.blackboard.localizationDone:
             dist = numpy.linalg.norm(covariance - self.previousCovariance)
             # rospy.loginfo("Distance == {}".format(dist))
             if dist >= 0.0025:
