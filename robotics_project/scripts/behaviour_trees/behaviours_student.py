@@ -357,6 +357,7 @@ class moveTo(pt.behaviour.Behaviour):
         self.navigation_result = None  # Before done, we dont know the result
         self.tried = False
         self.done = False
+        self.blackboard = pt.blackboard.Blackboard()
         self.pose_topic = given_topic
         super(moveTo, self).__init__("Moving to " + given_topic)
 
@@ -378,9 +379,18 @@ class moveTo(pt.behaviour.Behaviour):
         else:
             return pt.common.Status.RUNNING
 
+    def terminate(self, new_status):
+        if new_status == pt.common.Status.FAILURE:
+            # reset this node, and mark map as dirty
+            self.blackboard.mapIsDirty = True
+            self.tried = False
+            self.done = False
+            rospy.loginfo("  %s [Foo::terminate().terminate()][%s->%s]" % (self.name, self.status, new_status))
+
     def doneNavigating(self, state, result):
+
         # result = self.move_base_ac.get_result()
-        rospy.loginfo("Callback on navigation")
+        rospy.loginfo("-------------------------------Callback on navigation")
         # We get state == 3 when we achieve our goal position....
         if not (state == 3):
             self.move_base_ac.cancel_goal()
