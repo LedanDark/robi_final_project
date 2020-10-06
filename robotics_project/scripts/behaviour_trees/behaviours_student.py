@@ -11,59 +11,6 @@ from robotics_project.srv import MoveHead, MoveHeadRequest, MoveHeadResponse
 from std_srvs.srv import SetBool, Empty
 
 
-class counter(pt.behaviour.Behaviour):
-    """
-    Returns running for n ticks and success thereafter.
-    """
-
-    def __init__(self, n, name):
-        rospy.loginfo("Initialising counter behaviour.")
-
-        # counter
-        self.i = 0
-        self.n = n
-
-        # become a behaviour
-        super(counter, self).__init__(name)
-
-    def update(self):
-        # increment i
-        self.i += 1
-
-        # succeed after count is done
-        return pt.common.Status.FAILURE if self.i <= self.n else pt.common.Status.SUCCESS
-
-
-class go(pt.behaviour.Behaviour):
-    """
-    Returns running and commands a velocity indefinitely.
-    """
-
-    def __init__(self, name, linear, angular):
-        rospy.loginfo("Initialising go behaviour.")
-
-        # action space
-        self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
-        self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_top, Twist, queue_size=10)
-
-        # command
-        self.move_msg = Twist()
-        self.move_msg.linear.x = linear
-        self.move_msg.angular.z = angular
-
-        # become a behaviour
-        super(go, self).__init__(name)
-
-    def update(self):
-        # send the message
-        rate = rospy.Rate(10)
-        self.cmd_vel_pub.publish(self.move_msg)
-        rate.sleep()
-
-        # tell the tree that you're running
-        return pt.common.Status.RUNNING
-
-
 class localizeBehaviour(pt.behaviour.Behaviour):
     def __init__(self):
         self.blackboard = pt.blackboard.Blackboard()
@@ -163,7 +110,6 @@ class retrieveCube(pt.behaviour.Behaviour):
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_top, Twist, queue_size=10)
         rospy.wait_for_service(mv_head_srv_nm, timeout=30)
         rospy.wait_for_service(pick_cube_srv_nm, timeout=30)
-        self.reset()
         super(retrieveCube, self).__init__("Retrieve cube")
 
     def reset(self):
@@ -179,7 +125,7 @@ class retrieveCube(pt.behaviour.Behaviour):
         if not self.headPlacedDown:
             rospy.loginfo("%s: Head down for cube pickup..")
             self.move_head_req = self.move_head_srv("down")
-            self.rate.sleep()
+            rospy.sleep(1)
             self.headPlacedDown = True
         elif not self.cubePickedUp:
             rospy.loginfo("%s: Picking up cube...")
@@ -187,12 +133,14 @@ class retrieveCube(pt.behaviour.Behaviour):
             if not self.pick_cube_req:
                 rospy.loginfo("%s: FATAL ERROR -- FAILED TO PICK UP CUBE")
                 return pt.common.Status.FAILURE
+            # Change goal when cube has been picked up
             self.cubePickedUp = True
         elif not self.headPlacedUp:
             rospy.loginfo("%s: Head up for navigation..")
             self.move_head_req = self.move_head_srv("up")
             self.rate.sleep()
             self.headPlacedUp = True
+            self.blackboard.goal_position = "/place_pose_topic"
         elif not self.movedBack:
             rospy.loginfo("Moving backwards to avoid smacking into table...")
             self.cmd_vel_pub.publish(self.move_msg)
@@ -261,54 +209,14 @@ class tuckarm(pt.behaviour.Behaviour):
             return pt.common.Status.RUNNING
 
 
-class pickUpCube(pt.behaviour.Behaviour):
-    def __init__(self):
-        rospy.loginfo("Initialising pick up cube behaviour.")
-        # server
-        pick_cube_srv_nm = rospy.get_param(rospy.get_name() + '/pick_srv')
-        self.pick_cube_srv = rospy.ServiceProxy(pick_cube_srv_nm, SetBool)
-        rospy.wait_for_service(pick_cube_srv_nm, timeout=30)
-
-        # execution checker
-        self.tried = False
-        self.done = False
-
-        super(pickUpCube, self).__init__("Pick up cube!")
-
-    def update(self):
-        # success if done
-        if self.done:
-            return pt.common.Status.SUCCESS
-        # try if not tried
-        elif not self.tried:
-
-            # Pick up cube
-            rospy.loginfo("%s: Picking up cube...")
-            self.pick_cube_req = self.pick_cube_srv(True)
-            self.tried = True
-
-            # tell the tree you're running
-            return pt.common.Status.RUNNING
-
-        # if succesful
-        elif self.pick_cube_req.success:
-            self.done = True
-            return pt.common.Status.SUCCESS
-
-        # if failed
-        elif not self.pick_cube_req.success:
-            return pt.common.Status.FAILURE
-
-        # if still trying
-        else:
-            return pt.common.Status.RUNNING
-
-
 class placeDownCube(pt.behaviour.Behaviour):
     def __init__(self):
         rospy.loginfo("Initialising place down cube behaviour.")
         # server
         rospy.loginfo("%s: Placing cube down...")
+        mv_head_srv_nm = rospy.get_param(rospy.get_name() + '/move_head_srv')
+        self.move_head_srv = rospy.ServiceProxy(mv_head_srv_nm, MoveHead)
+        self.blackboard = pt.blackboard.Blackboard()
         place_cube_srv_nm = rospy.get_param(rospy.get_name() + '/place_srv')
         self.place_cube_Srv = rospy.ServiceProxy(place_cube_srv_nm, SetBool)
         rospy.wait_for_service(place_cube_srv_nm, timeout=30)
@@ -316,6 +224,8 @@ class placeDownCube(pt.behaviour.Behaviour):
         # execution checker
         self.tried = False
         self.done = False
+        self.headPlacedDown = False
+        self.headPlacedUp = False
 
         super(placeDownCube, self).__init__("Place down cube!")
 
@@ -324,24 +234,34 @@ class placeDownCube(pt.behaviour.Behaviour):
         if self.done:
             return pt.common.Status.SUCCESS
         # try if not tried
+        if not self.headPlacedDown:
+            rospy.loginfo("%s: Head down for cube pickup..")
+            self.move_head_req = self.move_head_srv("down")
+            rospy.sleep(1)
+            self.headPlacedDown = True
         elif not self.tried:
 
-            # Pick up cube
+            # place up cube
             rospy.loginfo("%s: Placing cube down...")
             rospy.sleep(1)
-            self.pick_cube_req = self.place_cube_Srv(True)
+            self.place_cube_req = self.place_cube_Srv(True)
             self.tried = True
 
             # tell the tree you're running
             return pt.common.Status.RUNNING
 
         # if succesful
-        elif self.pick_cube_req.success:
+        elif self.place_cube_req.success:
             self.done = True
+            rospy.loginfo("%s: Head up for navigation..")
+            self.move_head_req = self.move_head_srv("up")
+            rospy.sleep(1)
+            self.headPlacedUp = True
+            self.blackboard.goal_position = "/pick_pose_topic"
             return pt.common.Status.SUCCESS
 
         # if failed
-        elif not self.pick_cube_req.success:
+        elif not self.place_cube_req.success:
             rospy.loginfo("SIMULATION FATAL ERROR: UNABLE TO MOVE ARMS. RESET SIMULATION")
             return pt.common.Status.FAILURE
 
@@ -407,8 +327,9 @@ class movehead(pt.behaviour.Behaviour):
             return pt.common.Status.RUNNING
 
 
-class moveTo(pt.behaviour.Behaviour):
-    def __init__(self, given_topic):
+class navigateToGoal(pt.behaviour.Behaviour):
+    def __init__(self):
+        self.blackboard = pt.blackboard.Blackboard()
         self.move_base_ac = SimpleActionClient("/move_base", MoveBaseAction)
         if not self.move_base_ac.wait_for_server(rospy.Duration(1000)):
             rospy.logerr("%s: Could not connect to /move_base action server")
@@ -418,8 +339,15 @@ class moveTo(pt.behaviour.Behaviour):
         self.tried = False
         self.done = False
         self.blackboard = pt.blackboard.Blackboard()
-        self.pose_topic = given_topic
-        super(moveTo, self).__init__("Moving to " + given_topic)
+        self.currentGoal = "/pick_pose_topic"
+        self.blackboard.goal_position = self.currentGoal
+        super(navigateToGoal, self).__init__("Navigator ")
+
+    def initialise(self):
+        if self.currentGoal != self.blackboard.goal_position:
+            self.tried = False
+            self.done = False
+            self.currentGoal = self.blackboard.goal_position
 
     def update(self):
         # success if done
@@ -428,7 +356,7 @@ class moveTo(pt.behaviour.Behaviour):
         # try if not tried
         elif not self.tried:
             rospy.loginfo("Moving to goal...")
-            pose = rospy.wait_for_message(self.pose_topic, PoseStamped, 7)
+            pose = rospy.wait_for_message(self.currentGoal, PoseStamped, 7)
             goal = MoveBaseGoal()
             goal.target_pose = pose
             self.move_base_ac.send_goal(goal, done_cb=self.doneNavigating)
@@ -464,7 +392,7 @@ class moveTo(pt.behaviour.Behaviour):
             rospy.loginfo("Failed to reach desired position!")
             self.navigation_result = pt.common.Status.FAILURE
         else:
-            if self.pose_topic == "/pick_pose_topic":
+            if self.currentGoal == "/pick_pose_topic":
                 rospy.loginfo("Reached goal position!  -------- A")
                 self.blackboard.robotLocation = "A"
             else:

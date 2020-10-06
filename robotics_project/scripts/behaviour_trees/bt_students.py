@@ -14,19 +14,18 @@ class BehaviourTree(ptr.trees.BehaviourTree):
         move_head_srv = rospy.ServiceProxy(mv_head_srv_nm, MoveHead)
         blackboard = py_trees.blackboard.Blackboard()
         blackboard.mapIsDirty = True
-        blackboard.headState = None
         blackboard.cubeLocation = "A"  # A, Hand, or B
         blackboard.robotLocation = None  # None, A, or B
         # lower head
         headDown = movehead("down")
 
         # become the tree
+        #"/pick_pose_topic"
         relocateCube = RSequence(name="Cube sequence",
                                  children=[tuckarm(),
                                            localization(),
-                                           moveTo("/pick_pose_topic"),
+                                           navigateToGoal(),
                                            retrieveCube(),
-                                           moveTo("/place_pose_topic"),
                                            placeDownCube(),
                                            movehead("down")
                                            ])
