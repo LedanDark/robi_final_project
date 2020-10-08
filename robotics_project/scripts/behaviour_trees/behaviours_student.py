@@ -142,6 +142,8 @@ class retrieveCube(pt.behaviour.Behaviour):
                 return pt.common.Status.FAILURE
             # Change goal when cube has been picked up
             self.cubePickedUp = True
+            self.blackboard.cubeLocation = "Hand"
+
         elif not self.headPlacedUp:
             rospy.loginfo("%s: Head up for navigation..")
             self.move_head_req = self.move_head_srv("up")
@@ -152,9 +154,9 @@ class retrieveCube(pt.behaviour.Behaviour):
             self.cmd_vel_pub.publish(self.move_msg)
             self.rate.sleep()
             self.counter += 1
-            self.movedBack = self.counter >= 3
-            self.blackboard.cubeLocation = "Hand"
-            self.blackboard.goal_position = "/place_pose_topic"
+            if self.counter >= 3:
+                self.movedBack = True
+                self.blackboard.goal_position = "/place_pose_topic"
 
         return pt.common.Status.RUNNING
 
@@ -256,8 +258,8 @@ class placeDownCube(pt.behaviour.Behaviour):
             self.reset()
 
     def terminate(self, new_status):
-        if new_status == pt.common.Status.FAILURE:
-            rospy.loginfo("SIMULATION FATAL ERROR: UNABLE TO MOVE ARMS. RESET SIMULATION")
+        if self.status != pt.common.Status.FAILURE and new_status == pt.common.Status.FAILURE:
+            rospy.logerr("SIMULATION FATAL ERROR: UNABLE TO MOVE ARMS. RESET SIMULATION")
 
     def update(self):
         # success if done
@@ -269,6 +271,7 @@ class placeDownCube(pt.behaviour.Behaviour):
             self.move_head_req = self.move_head_srv("down")
             rospy.sleep(1)
             self.headPlacedDown = True
+            return pt.common.Status.RUNNING
         elif not self.tried:
 
             # place up cube
@@ -442,7 +445,11 @@ class navigateToGoal(pt.behaviour.Behaviour):
 class resetmission(pt.behaviour.Behaviour):
     def __init__(self):
         self.blackboard = pt.blackboard.Blackboard()
-        self.resetCubeService = rospy.ServiceProxy()
+        # self.resetCubeService = rospy.ServiceProxy()
+        self.move_msg = Twist()
+        self.move_msg.linear.x = -5
+        self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
+        self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_top, Twist, queue_size=10)
         super(resetmission, self).__init__("Reset mission")
 
     def update(self):
@@ -452,6 +459,9 @@ class resetmission(pt.behaviour.Behaviour):
         self.blackboard.resetPick = True
         self.blackboard.resetPlace = True
         resetCubePosition()
+        self.cmd_vel_pub.publish(self.move_msg)
+        rospy.sleep(2)
+        return pt.common.Status.SUCCESS
 
 
 class missionChecker(pt.behaviour.Behaviour):
@@ -471,8 +481,10 @@ class missionChecker(pt.behaviour.Behaviour):
         return pt.common.Status.FAILURE
 
     def terminate(self, new_status):
-        if new_status == pt.common.Status.SUCCESS:
+        if self.status != pt.common.Status.SUCCESS and new_status == pt.common.Status.SUCCESS:
             rospy.loginfo("++++++++++++++Great success!+++++++++++++")
 
     def aruco_pose_cb(self, aruco_pose_msg):
+        #Limitation, will not see cube teleporting away. Could we have "can see cube"? Only get update when we seee it..
+        #Could have a timer counter, that increases on this function call and decreases on succesful tick.
         self.blackboard.cubeLocation = self.blackboard.robotLocation
