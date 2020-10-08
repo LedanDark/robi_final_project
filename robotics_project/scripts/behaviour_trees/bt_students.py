@@ -6,22 +6,6 @@ from geometry_msgs.msg import PoseArray, Pose, Point
 from reactive_sequence import RSequence
 import math
 
-
-def calculateConvergance(poseArray):
-    """ :type poseArray: PoseArray"""
-    if len(poseArray.poses) <= 1001:
-        referencePosition = poseArray.poses[0].position
-        allowedDifference = 1.0
-        for i in range(len(poseArray.poses)):
-            otherPoint = poseArray.poses[i].position
-            dist = math.hypot(referencePosition.y - otherPoint.y, referencePosition.x - otherPoint.x)
-            # xDiff = numpy.abs(referencePosition.x - otherPoint.x)
-            if dist > allowedDifference:
-                hasConverged = False
-                break
-        hasConverged = True
-
-
 class BehaviourTree(ptr.trees.BehaviourTree):
 
     def __init__(self):
@@ -37,12 +21,6 @@ class BehaviourTree(ptr.trees.BehaviourTree):
         blackboard.resetPick = False
         blackboard.resetPlace = False
 
-        # lower head
-        headDown = movehead("down")
-        particleService = rospy.Subscriber("/particlecloud", PoseArray, callback=calculateConvergance)
-
-        # become the tree
-        # "/pick_pose_topic"
         relocateCube = RSequence(name="Cube sequence",
                                  children=[tuckarm(),
                                            localization(),
@@ -55,8 +33,9 @@ class BehaviourTree(ptr.trees.BehaviourTree):
                                       children=[missionChecker(), relocateCube]
                                       )
         super(BehaviourTree, self).__init__(tree)
+        # ensure head is up before starting, otherwise need to reset gazebo every time.
+        move_head_srv("up")
         # execute the behaviour tree
-        move_head_srv("up")  # ensure head is up before starting, otherwise need to reset gazebo every time.
         rospy.sleep(5)
         self.setup(timeout=10000)
         while not rospy.is_shutdown():
@@ -66,7 +45,7 @@ class BehaviourTree(ptr.trees.BehaviourTree):
 def localization():
     return pt.composites.Selector(
         name="Checked localization",
-        children=[isMapDirty(), localizeBehaviour()]
+        children=[isMapClean(), localizeBehaviour()]
     )
 
 

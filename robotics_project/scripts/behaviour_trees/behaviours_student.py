@@ -44,9 +44,9 @@ class localizeBehaviour(pt.behaviour.Behaviour):
         self.clear_costmap_srv = rospy.ServiceProxy(rospy.get_param(rospy.get_name() + '/clear_costmaps_srv'), Empty)
         self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_top, Twist, queue_size=10)
-        self.localize_service = rospy.ServiceProxy(rospy.get_param(rospy.get_name() + '/global_loc_srv'), Empty)
+        self.global_particle_srv = rospy.ServiceProxy(rospy.get_param(rospy.get_name() + '/global_loc_srv'), Empty)
         self.particleService = rospy.Subscriber("/particlecloud", PoseArray, callback=self.calculateConvergance)
-        super(localizeBehaviour, self).__init__("Localize Behaviour")
+        super(localizeBehaviour, self).__init__("Localizer")
 
     def reset(self):
         rospy.loginfo("------Reset : Localizer")
@@ -63,13 +63,10 @@ class localizeBehaviour(pt.behaviour.Behaviour):
     def update(self):
         # first, call localizeSrv
         if not self.localizeCalled:
-            rospy.loginfo("Calling localize service")
-            # self.clear_costmap_srv()
-            # rospy.sleep(1)
-            self.localize_service()
+            rospy.loginfo("Globalizing particles")
+            self.global_particle_srv()
             rospy.sleep(1)
             self.hasConverged = False
-            rospy.loginfo("xxxxxxxxxxxLocalize done")
             self.localizeCalled = True
         elif not self.spunAround:
             # spin around
@@ -78,10 +75,9 @@ class localizeBehaviour(pt.behaviour.Behaviour):
             self.counter += 1
             self.spunAround = self.hasConverged
         else:
-            rospy.loginfo("Calling clear costmap service")
             self.clear_costmap_srv()
             rospy.sleep(2)
-            rospy.loginfo("xxxxxxxxxxxCostmap cleared")
+            rospy.loginfo("Map is clean")
             self.blackboard.localizationDone = True
             self.blackboard.mapIsDirty = False
         if self.blackboard.localizationDone:
@@ -90,14 +86,14 @@ class localizeBehaviour(pt.behaviour.Behaviour):
             return pt.common.Status.RUNNING
 
 
-class isMapDirty(pt.behaviour.Behaviour):
+class isMapClean(pt.behaviour.Behaviour):
     def __init__(self):
         self.blackboard = pt.blackboard.Blackboard()
         self.previousCovariance = None
         self.covarianceHasJumped = False
         self.counter = 0
         self.robotPoseListener = rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.pose_callback)
-        super(isMapDirty, self).__init__("Is Map clean?")
+        super(isMapClean, self).__init__("Map checker")
 
     def update(self):
         if self.blackboard.mapIsDirty:
@@ -109,7 +105,6 @@ class isMapDirty(pt.behaviour.Behaviour):
         covariance = numpy.array(robotPoseWithCovarianceStamped.pose.covariance)
         if self.previousCovariance is not None and self.blackboard.localizationDone:
             dist = numpy.linalg.norm(covariance - self.previousCovariance)
-            # rospy.loginfo("Distance == {}".format(dist))
             if dist >= 0.0025:
                 self.counter += 1
                 if self.counter >= 3:
@@ -137,7 +132,7 @@ class retrieveCube(pt.behaviour.Behaviour):
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_top, Twist, queue_size=10)
         rospy.wait_for_service(mv_head_srv_nm, timeout=30)
         rospy.wait_for_service(pick_cube_srv_nm, timeout=30)
-        super(retrieveCube, self).__init__("Retrieve cube")
+        super(retrieveCube, self).__init__("Cube retriever")
 
     def reset(self):
         rospy.loginfo("------Reset : Retrieval")
@@ -156,22 +151,22 @@ class retrieveCube(pt.behaviour.Behaviour):
         if self.movedBack:
             return pt.common.Status.SUCCESS
         if not self.headPlacedDown:
-            rospy.loginfo("%s: Head down for cube pickup..")
+            rospy.loginfo("Head down for cube pickup..")
             self.move_head_req = self.move_head_srv("down")
             rospy.sleep(1)
             self.headPlacedDown = True
         elif not self.cubePickedUp:
-            rospy.loginfo("%s: Picking up cube...")
+            rospy.loginfo("Picking up cube...")
             self.pick_cube_req = self.pick_cube_srv(True)
             if not self.pick_cube_req:
-                rospy.loginfo("%s: FATAL ERROR -- FAILED TO PICK UP CUBE")
+                rospy.loginfo("FATAL ERROR -- FAILED TO PICK UP CUBE")
                 return pt.common.Status.FAILURE
             # Change goal when cube has been picked up
             self.cubePickedUp = True
             self.blackboard.cubeLocation = "Hand"
 
         elif not self.headPlacedUp:
-            rospy.loginfo("%s: Head up for navigation..")
+            rospy.loginfo("Head up for navigation..")
             self.move_head_req = self.move_head_srv("up")
             self.rate.sleep()
             self.headPlacedUp = True
@@ -256,9 +251,7 @@ class tuckarm(pt.behaviour.Behaviour):
 
 class placeDownCube(pt.behaviour.Behaviour):
     def __init__(self):
-        rospy.loginfo("Initialising place down cube behaviour.")
         # server
-        rospy.loginfo("%s: Placing cube down...")
         mv_head_srv_nm = rospy.get_param(rospy.get_name() + '/move_head_srv')
         self.move_head_srv = rospy.ServiceProxy(mv_head_srv_nm, MoveHead)
         self.blackboard = pt.blackboard.Blackboard()
@@ -269,7 +262,7 @@ class placeDownCube(pt.behaviour.Behaviour):
         # execution checker
         self.reset()
 
-        super(placeDownCube, self).__init__("Place down cube!")
+        super(placeDownCube, self).__init__("Cube placer")
 
     def reset(self):
         rospy.loginfo("------Reset : Placer")
@@ -293,7 +286,7 @@ class placeDownCube(pt.behaviour.Behaviour):
             return pt.common.Status.SUCCESS
         # try if not tried
         if not self.headPlacedDown:
-            rospy.loginfo("%s: Head down for cube pickup..")
+            rospy.loginfo("Head down for cube placing..")
             self.move_head_req = self.move_head_srv("down")
             rospy.sleep(1)
             self.headPlacedDown = True
@@ -301,7 +294,7 @@ class placeDownCube(pt.behaviour.Behaviour):
         elif not self.tried:
 
             # place up cube
-            rospy.loginfo("%s: Placing cube down...")
+            rospy.loginfo("Placing cube down...")
             rospy.sleep(1)
             self.place_cube_req = self.place_cube_Srv(True)
             self.tried = True
@@ -312,7 +305,7 @@ class placeDownCube(pt.behaviour.Behaviour):
         # if succesful
         elif self.place_cube_req.success:
             self.done = True
-            rospy.loginfo("%s: Head up for navigation..")
+            rospy.loginfo("Head up for navigation..")
             self.move_head_req = self.move_head_srv("up")
             rospy.sleep(1)
             self.headPlacedUp = True
@@ -320,63 +313,6 @@ class placeDownCube(pt.behaviour.Behaviour):
 
         # if failed
         elif not self.place_cube_req.success:
-            return pt.common.Status.FAILURE
-
-        # if still trying
-        else:
-            return pt.common.Status.RUNNING
-
-
-class movehead(pt.behaviour.Behaviour):
-    """
-    Lowers or raises the head of the robot.
-    Returns running whilst awaiting the result,
-    success if the action was succesful, and v.v..
-    """
-
-    def __init__(self, direction):
-
-        rospy.loginfo("Initialising move head behaviour.")
-
-        # server
-        mv_head_srv_nm = rospy.get_param(rospy.get_name() + '/move_head_srv')
-        self.move_head_srv = rospy.ServiceProxy(mv_head_srv_nm, MoveHead)
-        rospy.wait_for_service(mv_head_srv_nm, timeout=30)
-
-        # head movement direction; "down" or "up"
-        self.direction = direction
-
-        # execution checker
-        self.tried = False
-        self.done = False
-
-        # become a behaviour
-        super(movehead, self).__init__("Lower head!")
-
-    def update(self):
-        # success if done
-        if self.done:
-            return pt.common.Status.SUCCESS
-
-        # try if not tried
-        elif not self.tried:
-
-            # command
-            rospy.loginfo("moving the head {}".format(self.direction))
-            self.move_head_req = self.move_head_srv(self.direction)
-            rospy.sleep(1)
-            self.tried = True
-
-            # tell the tree you're running
-            return pt.common.Status.RUNNING
-
-        # if succesful
-        elif self.move_head_req.success:
-            self.done = True
-            return pt.common.Status.SUCCESS
-
-        # if failed
-        elif not self.move_head_req.success:
             return pt.common.Status.FAILURE
 
         # if still trying
@@ -406,7 +342,7 @@ class navigateToGoal(pt.behaviour.Behaviour):
         self.blackboard = pt.blackboard.Blackboard()
         self.currentGoal = "/pick_pose_topic"
         self.blackboard.goal_position = self.currentGoal
-        super(navigateToGoal, self).__init__("Navigator ")
+        super(navigateToGoal, self).__init__("Navigator")
 
     def initialise(self):
         if self.currentGoal != self.blackboard.goal_position:
@@ -498,7 +434,7 @@ class missionChecker(pt.behaviour.Behaviour):
         self.aruco_pose_top = rospy.get_param(rospy.get_name() + '/aruco_pose_topic')
         self.aruco_pose_subs = None
         self.tried = False
-        super(missionChecker, self).__init__("Checking for cube")
+        super(missionChecker, self).__init__("Mission checker")
 
     def update(self):
         if not self.tried:
