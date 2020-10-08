@@ -440,6 +440,9 @@ class navigateToGoal(pt.behaviour.Behaviour):
             rospy.loginfo("  %s [%s->%s]" % (self.name, self.status, new_status))
             # self.move_base_ac.cancel_all_goals()
             self.blackboard.mapIsDirty = True
+            rospy.loginfo(
+                "---------------------------Map Marked As Dirty-------------------------------- status {} , -> {}".format(
+                    self.status, new_status))
             rospy.sleep(1)
             self.tried = False
             self.done = False
@@ -451,10 +454,9 @@ class navigateToGoal(pt.behaviour.Behaviour):
     def doneNavigating(self, state, result):
 
         # result = self.move_base_ac.get_result()
-        rospy.loginfo("-------------------------------Callback on navigation")
+        rospy.loginfo("-------------------------------Callback on navigation {}".format(state))
         # We get state == 3 when we achieve our goal position....
-        if not (state == 3):
-            # self.move_base_ac.cancel_all_goals()
+        if not (state == 3):  # Could be cancelled, not
             rospy.loginfo("Failed to reach desired position!")
             self.navigation_result = pt.common.Status.FAILURE
         else:
