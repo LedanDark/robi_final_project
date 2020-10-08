@@ -80,6 +80,7 @@ class localizeBehaviour(pt.behaviour.Behaviour):
         else:
             rospy.loginfo("Calling clear costmap service")
             self.clear_costmap_srv()
+            rospy.sleep(2)
             rospy.loginfo("xxxxxxxxxxxCostmap cleared")
             self.blackboard.localizationDone = True
             self.blackboard.mapIsDirty = False
