@@ -10,19 +10,42 @@ from move_base_msgs.msg import MoveBaseGoal, MoveBaseAction
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
 from robotics_project.srv import MoveHead
 from std_srvs.srv import SetBool, Empty
+from geometry_msgs.msg import PoseArray, Pose, Point
+import math
 
 
 class localizeBehaviour(pt.behaviour.Behaviour):
+    def calculateConvergance(self, poseArray):
+        """ :type poseArray: PoseArray"""
+        maxDist = -1
+        if len(poseArray.poses) <= 1001:
+            referencePosition = poseArray.poses[0].position
+            allowedDifference = 0.5
+            for i in range(len(poseArray.poses)):
+                otherPoint = poseArray.poses[i].position
+                dist = math.hypot(referencePosition.y - otherPoint.y, referencePosition.x - otherPoint.x)
+                # xDiff = numpy.abs(referencePosition.x - otherPoint.x)
+                if dist > allowedDifference:
+                    self.hasConverged = False
+                    return
+                elif dist > maxDist:
+                    maxDist = dist
+            self.hasConverged = True
+        else:
+            self.hasConverged = False
+
     def __init__(self):
         self.blackboard = pt.blackboard.Blackboard()
         self.reset()
         self.move_msg = Twist()
         self.move_msg.angular.z = 1
         self.rate = rospy.Rate(10)
+        self.hasConverged = True
         self.clear_costmap_srv = rospy.ServiceProxy(rospy.get_param(rospy.get_name() + '/clear_costmaps_srv'), Empty)
         self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
         self.cmd_vel_pub = rospy.Publisher(self.cmd_vel_top, Twist, queue_size=10)
         self.localize_service = rospy.ServiceProxy(rospy.get_param(rospy.get_name() + '/global_loc_srv'), Empty)
+        self.particleService = rospy.Subscriber("/particlecloud", PoseArray, callback=self.calculateConvergance)
         super(localizeBehaviour, self).__init__("Localize Behaviour")
 
     def reset(self):
@@ -41,9 +64,11 @@ class localizeBehaviour(pt.behaviour.Behaviour):
         # first, call localizeSrv
         if not self.localizeCalled:
             rospy.loginfo("Calling localize service")
-            # TODO : Check if this is too fast
+            # self.clear_costmap_srv()
+            # rospy.sleep(1)
             self.localize_service()
             rospy.sleep(1)
+            self.hasConverged = False
             rospy.loginfo("xxxxxxxxxxxLocalize done")
             self.localizeCalled = True
         elif not self.spunAround:
@@ -51,7 +76,7 @@ class localizeBehaviour(pt.behaviour.Behaviour):
             self.cmd_vel_pub.publish(self.move_msg)
             self.rate.sleep()
             self.counter += 1
-            self.spunAround = self.counter >= 60
+            self.spunAround = self.hasConverged
         else:
             rospy.loginfo("Calling clear costmap service")
             self.clear_costmap_srv()
@@ -70,7 +95,7 @@ class isMapDirty(pt.behaviour.Behaviour):
         self.previousCovariance = None
         self.covarianceHasJumped = False
         self.counter = 0
-        self.subramanian = rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.pose_callback)
+        self.robotPoseListener = rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.pose_callback)
         super(isMapDirty, self).__init__("Is Map clean?")
 
     def update(self):
@@ -79,8 +104,8 @@ class isMapDirty(pt.behaviour.Behaviour):
         else:
             return pt.common.Status.SUCCESS
 
-    def pose_callback(self, poseWithCovarianceStamped):
-        covariance = numpy.array(poseWithCovarianceStamped.pose.covariance)
+    def pose_callback(self, robotPoseWithCovarianceStamped):
+        covariance = numpy.array(robotPoseWithCovarianceStamped.pose.covariance)
         if self.previousCovariance is not None and self.blackboard.localizationDone:
             dist = numpy.linalg.norm(covariance - self.previousCovariance)
             # rospy.loginfo("Distance == {}".format(dist))
@@ -154,7 +179,7 @@ class retrieveCube(pt.behaviour.Behaviour):
             self.cmd_vel_pub.publish(self.move_msg)
             self.rate.sleep()
             self.counter += 1
-            if self.counter >= 3:
+            if self.counter >= 5:
                 self.movedBack = True
                 self.blackboard.goal_position = "/place_pose_topic"
 
@@ -485,6 +510,6 @@ class missionChecker(pt.behaviour.Behaviour):
             rospy.loginfo("++++++++++++++Great success!+++++++++++++")
 
     def aruco_pose_cb(self, aruco_pose_msg):
-        #Limitation, will not see cube teleporting away. Could we have "can see cube"? Only get update when we seee it..
-        #Could have a timer counter, that increases on this function call and decreases on succesful tick.
+        # Limitation, will not see cube teleporting away. Could we have "can see cube"? Only get update when we seee it..
+        # Could have a timer counter, that increases on this function call and decreases on succesful tick.
         self.blackboard.cubeLocation = self.blackboard.robotLocation

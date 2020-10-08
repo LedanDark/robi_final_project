@@ -2,7 +2,24 @@
 import py_trees
 import py_trees as pt, py_trees_ros as ptr, rospy
 from behaviours_student import *
+from geometry_msgs.msg import PoseArray, Pose, Point
 from reactive_sequence import RSequence
+import math
+
+
+def calculateConvergance(poseArray):
+    """ :type poseArray: PoseArray"""
+    if len(poseArray.poses) <= 1001:
+        referencePosition = poseArray.poses[0].position
+        allowedDifference = 1.0
+        for i in range(len(poseArray.poses)):
+            otherPoint = poseArray.poses[i].position
+            dist = math.hypot(referencePosition.y - otherPoint.y, referencePosition.x - otherPoint.x)
+            # xDiff = numpy.abs(referencePosition.x - otherPoint.x)
+            if dist > allowedDifference:
+                hasConverged = False
+                break
+        hasConverged = True
 
 
 class BehaviourTree(ptr.trees.BehaviourTree):
@@ -22,6 +39,7 @@ class BehaviourTree(ptr.trees.BehaviourTree):
 
         # lower head
         headDown = movehead("down")
+        particleService = rospy.Subscriber("/particlecloud", PoseArray, callback=calculateConvergance)
 
         # become the tree
         # "/pick_pose_topic"
