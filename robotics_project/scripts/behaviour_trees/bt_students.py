@@ -16,18 +16,22 @@ class BehaviourTree(ptr.trees.BehaviourTree):
         blackboard.mapIsDirty = True
         blackboard.cubeLocation = "A"  # A, Hand, or B
         blackboard.robotLocation = None  # None, A, or B
+        blackboard.resetTuckArm = False
+        blackboard.resetPick = False
+        blackboard.resetPlace = False
+
         # lower head
         headDown = movehead("down")
 
         # become the tree
-        #"/pick_pose_topic"
+        # "/pick_pose_topic"
         relocateCube = RSequence(name="Cube sequence",
                                  children=[tuckarm(),
                                            localization(),
                                            navigateToGoal(),
                                            retrieveCube(),
                                            placeDownCube(),
-                                           movehead("down")
+                                           resetmission()
                                            ])
         tree = pt.composites.Selector(name="Main sequence",
                                       children=[missionChecker(), relocateCube]

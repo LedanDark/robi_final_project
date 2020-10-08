@@ -2,12 +2,13 @@
 # sprague@kth.se
 # Behaviours needed for the example student solution.
 import numpy
-import py_trees as pt, py_trees_ros as ptr, rospy
-from geometry_msgs.msg import Twist, PoseStamped, PoseWithCovarianceStamped
+import py_trees as pt
+import rospy
 from actionlib import SimpleActionClient
+from geometry_msgs.msg import Twist, PoseStamped, PoseWithCovarianceStamped
 from move_base_msgs.msg import MoveBaseGoal, MoveBaseAction
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
-from robotics_project.srv import MoveHead, MoveHeadRequest, MoveHeadResponse
+from robotics_project.srv import MoveHead
 from std_srvs.srv import SetBool, Empty
 
 
@@ -25,7 +26,7 @@ class localizeBehaviour(pt.behaviour.Behaviour):
         super(localizeBehaviour, self).__init__("Localize Behaviour")
 
     def reset(self):
-        rospy.loginfo("Localizer is resetting")
+        rospy.loginfo("------Reset : Localizer")
         self.localizeCalled = False
         self.spunAround = False
         self.counter = 0
@@ -113,11 +114,17 @@ class retrieveCube(pt.behaviour.Behaviour):
         super(retrieveCube, self).__init__("Retrieve cube")
 
     def reset(self):
+        rospy.loginfo("------Reset : Retrieval")
         self.headPlacedDown = False
         self.headPlacedUp = False
         self.cubePickedUp = False
         self.movedBack = False
         self.counter = 0
+
+    def initialise(self):
+        if self.blackboard.resetPick:
+            self.blackboard.resetPick = False
+            self.reset()
 
     def update(self):
         if self.movedBack:
@@ -140,7 +147,6 @@ class retrieveCube(pt.behaviour.Behaviour):
             self.move_head_req = self.move_head_srv("up")
             self.rate.sleep()
             self.headPlacedUp = True
-            self.blackboard.goal_position = "/place_pose_topic"
         elif not self.movedBack:
             rospy.loginfo("Moving backwards to avoid smacking into table...")
             self.cmd_vel_pub.publish(self.move_msg)
@@ -148,6 +154,8 @@ class retrieveCube(pt.behaviour.Behaviour):
             self.counter += 1
             self.movedBack = self.counter >= 3
             self.blackboard.cubeLocation = "Hand"
+            self.blackboard.goal_position = "/place_pose_topic"
+
         return pt.common.Status.RUNNING
 
 
@@ -163,18 +171,27 @@ class tuckarm(pt.behaviour.Behaviour):
 
         # Set up action client
         self.play_motion_ac = SimpleActionClient("/play_motion", PlayMotionAction)
-
+        self.blackboard = pt.blackboard.Blackboard()
         # personal goal setting
         self.goal = PlayMotionGoal()
         self.goal.motion_name = 'home'
         self.goal.skip_planning = True
 
         # execution checker
+        self.reset()
+        # become a behaviour
+        super(tuckarm, self).__init__("Tuck arm!")
+
+    def reset(self):
+        rospy.loginfo("------Reset : Arm Tucker")
         self.sent_goal = False
         self.finished = False
 
-        # become a behaviour
-        super(tuckarm, self).__init__("Tuck arm!")
+    def initialise(self):
+        if self.blackboard.resetTuckArm:
+            self.blackboard.resetTuckArm = False
+            self.sent_goal = False
+            self.finished = False
 
     def update(self):
 
@@ -222,12 +239,25 @@ class placeDownCube(pt.behaviour.Behaviour):
         rospy.wait_for_service(place_cube_srv_nm, timeout=30)
 
         # execution checker
+        self.reset()
+
+        super(placeDownCube, self).__init__("Place down cube!")
+
+    def reset(self):
+        rospy.loginfo("------Reset : Placer")
         self.tried = False
         self.done = False
         self.headPlacedDown = False
         self.headPlacedUp = False
 
-        super(placeDownCube, self).__init__("Place down cube!")
+    def initialise(self):
+        if self.blackboard.resetPlace:
+            self.blackboard.resetPlace = False
+            self.reset()
+
+    def terminate(self, new_status):
+        if new_status == pt.common.Status.FAILURE:
+            rospy.loginfo("SIMULATION FATAL ERROR: UNABLE TO MOVE ARMS. RESET SIMULATION")
 
     def update(self):
         # success if done
@@ -257,12 +287,10 @@ class placeDownCube(pt.behaviour.Behaviour):
             self.move_head_req = self.move_head_srv("up")
             rospy.sleep(1)
             self.headPlacedUp = True
-            self.blackboard.goal_position = "/pick_pose_topic"
             return pt.common.Status.SUCCESS
 
         # if failed
         elif not self.place_cube_req.success:
-            rospy.loginfo("SIMULATION FATAL ERROR: UNABLE TO MOVE ARMS. RESET SIMULATION")
             return pt.common.Status.FAILURE
 
         # if still trying
@@ -327,6 +355,14 @@ class movehead(pt.behaviour.Behaviour):
             return pt.common.Status.RUNNING
 
 
+def resetCubePosition():
+    pass
+    # rospy.service. <node pkg="rosservice" type="rosservice" name="set_cube_pose" output="screen" args="call
+    # /gazebo/set_model_state '{model_state: { model_name: aruco_cube, pose: { position: { x: -1.130530,
+    # y: -6.653650, z: 0.86250 }, orientation: {x: 0, y: 0, z: 0, w: 1 } }, twist: { linear: {x: 0 , y: 0, z: 0 } ,
+    # angular: { x: 0, y: 0, z: 0 } } , reference_frame: map } }'" />
+
+
 class navigateToGoal(pt.behaviour.Behaviour):
     def __init__(self):
         self.blackboard = pt.blackboard.Blackboard()
@@ -348,6 +384,7 @@ class navigateToGoal(pt.behaviour.Behaviour):
             self.tried = False
             self.done = False
             self.currentGoal = self.blackboard.goal_position
+            # Switching from B to A
 
     def update(self):
         # success if done
@@ -402,6 +439,21 @@ class navigateToGoal(pt.behaviour.Behaviour):
         self.done = True
 
 
+class resetmission(pt.behaviour.Behaviour):
+    def __init__(self):
+        self.blackboard = pt.blackboard.Blackboard()
+        self.resetCubeService = rospy.ServiceProxy()
+        super(resetmission, self).__init__("Reset mission")
+
+    def update(self):
+        rospy.loginfo("Resetting mission")
+        self.blackboard.goal_position = "/pick_pose_topic"
+        self.blackboard.resetTuckArm = True
+        self.blackboard.resetPick = True
+        self.blackboard.resetPlace = True
+        resetCubePosition()
+
+
 class missionChecker(pt.behaviour.Behaviour):
     def __init__(self):
         self.blackboard = pt.blackboard.Blackboard()
@@ -415,9 +467,12 @@ class missionChecker(pt.behaviour.Behaviour):
             self.aruco_pose_subs = rospy.Subscriber(self.aruco_pose_top, PoseStamped, self.aruco_pose_cb)
             self.tried = True
         elif self.blackboard.cubeLocation == "B":
-            rospy.loginfo("++++++++++++++Great success!+++++++++++++")
             return pt.common.Status.SUCCESS
         return pt.common.Status.FAILURE
+
+    def terminate(self, new_status):
+        if new_status == pt.common.Status.SUCCESS:
+            rospy.loginfo("++++++++++++++Great success!+++++++++++++")
 
     def aruco_pose_cb(self, aruco_pose_msg):
         self.blackboard.cubeLocation = self.blackboard.robotLocation
