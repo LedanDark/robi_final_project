@@ -19,6 +19,8 @@ class localizeBehaviour(pt.behaviour.Behaviour):
     def calculateConvergance(self, poseArray):
         """ :type poseArray: PoseArray"""
         maxDist = -1
+        # Only checking convergence below 1001 points, as we observed through experiments that the cloud only converged
+        # After the number of points went below this threshold.
         if len(poseArray.poses) <= 1001:
             referencePosition = poseArray.poses[0].position
             allowedDifference = 0.5
