@@ -108,8 +108,8 @@
       <param name="pick_srv"            value="/$(arg namespace_project)/pick_cube_gui"/>
       <param name="place_srv"           value="/$(arg namespace_project)/place_cube_gui"/>
       <param name="move_head_srv"       value="/$(arg namespace_project)/move_head_gui"/>
-      <param name="pickup_marker_pose"  value="/steven"/>
-      <param name="place_marker_pose"   value="/fred"/>
+      <param name="pickup_marker_pose"  value="/marker_pickup"/>
+      <param name="place_marker_pose"   value="/marker_placedown"/>
     </node>
 
     <!-- Aruco marker detector -->
@@ -127,8 +127,8 @@
   <!-- Arm manipulation node -->
   <node pkg="robotics_project" name="manipulation_server" type="manipulation_server.py" output="screen">
       <rosparam command="load" file="$(find robotics_project)/config/pick_and_place_params.yaml" />
-      <param name="pickup_marker_pose"  value="/steven" />
-      <param name="place_marker_pose"   value="/fred" />
+      <param name="pickup_marker_pose"  value="/marker_pickup" />
+      <param name="place_marker_pose"   value="/marker_placedown" />
   </node>
 
 
