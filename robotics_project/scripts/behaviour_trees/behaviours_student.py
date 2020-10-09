@@ -5,12 +5,14 @@ import numpy
 import py_trees as pt
 import rospy
 from actionlib import SimpleActionClient
+from gazebo_msgs.msg import ModelState
+from gazebo_msgs.srv import SetModelState, SetModelStateRequest
 from geometry_msgs.msg import Twist, PoseStamped, PoseWithCovarianceStamped
 from move_base_msgs.msg import MoveBaseGoal, MoveBaseAction
 from play_motion_msgs.msg import PlayMotionAction, PlayMotionGoal
 from robotics_project.srv import MoveHead
 from std_srvs.srv import SetBool, Empty
-from geometry_msgs.msg import PoseArray, Pose, Point
+from geometry_msgs.msg import PoseArray, Pose, Point, Vector3, Quaternion
 import math
 
 
@@ -320,14 +322,6 @@ class placeDownCube(pt.behaviour.Behaviour):
             return pt.common.Status.RUNNING
 
 
-def resetCubePosition():
-    pass
-    # rospy.service. <node pkg="rosservice" type="rosservice" name="set_cube_pose" output="screen" args="call
-    # /gazebo/set_model_state '{model_state: { model_name: aruco_cube, pose: { position: { x: -1.130530,
-    # y: -6.653650, z: 0.86250 }, orientation: {x: 0, y: 0, z: 0, w: 1 } }, twist: { linear: {x: 0 , y: 0, z: 0 } ,
-    # angular: { x: 0, y: 0, z: 0 } } , reference_frame: map } }'" />
-
-
 class navigateToGoal(pt.behaviour.Behaviour):
     def __init__(self):
         self.blackboard = pt.blackboard.Blackboard()
@@ -409,7 +403,7 @@ class navigateToGoal(pt.behaviour.Behaviour):
 class resetmission(pt.behaviour.Behaviour):
     def __init__(self):
         self.blackboard = pt.blackboard.Blackboard()
-        # self.resetCubeService = rospy.ServiceProxy()
+        self.resetService = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
         self.move_msg = Twist()
         self.move_msg.linear.x = -5
         self.cmd_vel_top = rospy.get_param(rospy.get_name() + '/cmd_vel_topic')
@@ -422,10 +416,23 @@ class resetmission(pt.behaviour.Behaviour):
         self.blackboard.resetTuckArm = True
         self.blackboard.resetPick = True
         self.blackboard.resetPlace = True
-        resetCubePosition()
+        self.resetCubePosition()
         self.cmd_vel_pub.publish(self.move_msg)
         rospy.sleep(2)
         return pt.common.Status.SUCCESS
+
+    # Resets cube position to table A
+    def resetCubePosition(self):
+        modelState = ModelState()
+        modelState.model_name = 'aruco_cube'
+        modelState.pose.position = Point(-1.130530, -6.653650, 0.86250)
+        modelState.pose.orientation = Quaternion(0, 0, 0, 1)
+        modelState.twist.linear = Vector3(0, 0, 0)
+        modelState.twist.angular = Vector3(0, 0, 0)
+        modelState.reference_frame = 'map'
+        startState = SetModelStateRequest()
+        startState.model_state = modelState
+        self.resetService(startState)
 
 
 class missionChecker(pt.behaviour.Behaviour):
