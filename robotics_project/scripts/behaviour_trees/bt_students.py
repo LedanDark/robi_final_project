@@ -14,6 +14,7 @@ import numpy
 import rospy
 from reactive_sequence import RSequence
 
+
 class localizeBehaviour(pt.behaviour.Behaviour):
     def calculateConvergance(self, poseArray):
         """ :type poseArray: PoseArray"""
@@ -24,7 +25,6 @@ class localizeBehaviour(pt.behaviour.Behaviour):
             for i in range(len(poseArray.poses)):
                 otherPoint = poseArray.poses[i].position
                 dist = math.hypot(referencePosition.y - otherPoint.y, referencePosition.x - otherPoint.x)
-                # xDiff = numpy.abs(referencePosition.x - otherPoint.x)
                 if dist > allowedDifference:
                     self.hasConverged = False
                     return
@@ -454,8 +454,8 @@ class missionChecker(pt.behaviour.Behaviour):
             rospy.loginfo("++++++++++++++Great success!+++++++++++++")
 
     def aruco_pose_cb(self, aruco_pose_msg):
-        # Limitation, will not see cube teleporting away. Could we have "can see cube"? Only get update when we seee it..
-        # Could have a timer counter, that increases on this function call and decreases on succesful tick.
+        # Limitation, will not see cube teleporting away. Could we have "can see cube"? Only get update when we seee
+        # it.. Could have a timer counter, that increases on this function call and decreases on succesful tick.
         self.blackboard.cubeLocation = self.blackboard.robotLocation
 
 
